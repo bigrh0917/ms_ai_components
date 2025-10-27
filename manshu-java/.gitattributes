@@ -1,0 +1,7 @@
+* text=auto
+
+*.java eol=lf
+*.md eol=lf
+*.yml eol=lf
+*.yaml eol=lf
+*.properties eol=lf

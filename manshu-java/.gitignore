@@ -1,0 +1,24 @@
+# Build output
+/target
+*.class
+*.jar
+*.war
+*.ear
+
+# Logs
+/logs
+*.log
+hs_err_pid*
+replay_pid*
+
+# IDE and tooling
+.idea/
+.vscode/
+*.iml
+.DS_Store
+.VSCodeCounter
+Thumbs.db
+
+# Generated or temporary files
+*.local
+src/main/resources/application.yml~

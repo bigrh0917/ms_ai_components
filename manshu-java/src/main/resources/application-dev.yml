@@ -1,0 +1,95 @@
+server:
+  port: 8081
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/Manshu?useSSL=false&serverTimezone=UTC
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQL8Dialect
+  data:
+    redis:
+      host: localhost
+      port: 6379
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 50MB
+      max-request-size: 100MB
+  kafka:
+    enabled: true
+    bootstrap-servers: 127.0.0.1:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+      enable-idempotence: true
+      transactional-id-prefix: file-upload-tx-
+      properties:
+        client.dns.lookup: use_all_dns_ips
+    consumer:
+      group-id: file-processing-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+        client.dns.lookup: use_all_dns_ips
+    topic:
+      file-processing: file-processing-topic1
+      dlt: file-processing-dlt
+  webflux:
+    client:
+      max-in-memory-size: 16MB
+  codec:
+    max-in-memory-size: 16MB
+minio:
+  endpoint: http://localhost:9000
+  accessKey: minioadmin
+  secretKey: minioadmin
+  bucketName: uploads
+  publicUrl: http://localhost:9000
+jwt:
+  secret-key: "PXrQbuCwXwOZzkML/Vm2S5rSwt1iybvmKtGDzVEu+Hc="
+admin:
+  username: admin
+  password: admin123
+  primary-org: default
+  org-tags: default,admin
+file:
+  parsing:
+    chunk-size: 512
+elasticsearch:
+  host: localhost
+  port: 9200
+  scheme: http
+logging:
+  level:
+    org.springframework.web: DEBUG
+    org.springframework.boot.autoconfigure.web.servlet: DEBUG
+    org.springframework.security: DEBUG
+    com.yizhaoqi.manshu.service: DEBUG
+    io.minio: DEBUG
+log4j:
+  logger:
+    org:
+      apache:
+        tika=DEBUG:
+deepseek:
+  api:
+    url: https://api.deepseek.com/v1
+    key:
+embedding:
+  api:
+    url: https://dashscope.aliyuncs.com/compatible-mode/v1
+    key:
+    model: text-embedding-v4
+    batch-size: 10
+    dimension: 2048
