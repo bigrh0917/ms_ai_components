@@ -10,28 +10,28 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 
 class Settings(BaseSettings):
-    """应用配置"""
+    """应用配置 - 所有配置从 .env 文件读取"""
     
     # 应用配置
-    APP_NAME: str = "RAG API"
-    DEBUG: bool = False
-    API_V1_STR: str = "/api/v1"
+    APP_NAME: str
+    DEBUG: bool
+    API_V1_STR: str
     
     # 安全配置
-    SECRET_KEY: str = "your-secret-key-change-in-production"
-    ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    TEMP_TOKEN_EXPIRE_MINUTES: int = 5
+    SECRET_KEY: str
+    ALGORITHM: str
+    ACCESS_TOKEN_EXPIRE_MINUTES: int
+    TEMP_TOKEN_EXPIRE_MINUTES: int
     
-    # CORS 配置（开发环境允许所有源）
-    CORS_ORIGINS: List[str] = ["*"]  # 或从环境变量读取
+    # CORS 配置
+    CORS_ORIGINS: List[str]
     
     # 数据库配置
-    DATABASE_HOST: str = "localhost"
-    DATABASE_PORT: int = 3306
-    DATABASE_USER: str = "root"
-    DATABASE_PASSWORD: str = "123456"
-    DATABASE_NAME: str = "fastapi"
+    DATABASE_HOST: str
+    DATABASE_PORT: int
+    DATABASE_USER: str
+    DATABASE_PASSWORD: str
+    DATABASE_NAME: str
     
     @property
     def DATABASE_URL(self) -> str:
@@ -39,31 +39,68 @@ class Settings(BaseSettings):
         return f"mysql+aiomysql://{self.DATABASE_USER}:{self.DATABASE_PASSWORD}@{self.DATABASE_HOST}:{self.DATABASE_PORT}/{self.DATABASE_NAME}"
     
     # Redis 配置
-    REDIS_HOST: str = "localhost"
-    REDIS_PORT: int = 6379
-    REDIS_DB: int = 0
-    REDIS_PASSWORD: str = ""
+    REDIS_HOST: str
+    REDIS_PORT: int
+    REDIS_DB: int
+    REDIS_PASSWORD: str
     
     # 验证码配置
-    CAPTCHA_LENGTH: int = 4
-    CAPTCHA_EXPIRE_SECONDS: int = 120
-    EMAIL_CODE_LENGTH: int = 6
-    EMAIL_CODE_EXPIRE_SECONDS: int = 300
+    CAPTCHA_LENGTH: int
+    CAPTCHA_EXPIRE_SECONDS: int
+    EMAIL_CODE_LENGTH: int
+    EMAIL_CODE_EXPIRE_SECONDS: int
     
-    # 速率限制配置（统一管理）
-    RATE_LIMITS: dict = {
-        "captcha": {"limit": 10, "window": 60},       # 图形验证码：每IP每60秒最多10次
-        "email_code": {"limit": 3, "window": 60},     # 邮箱验证码：每邮箱每60秒最多3次
-        "register": {"limit": 5, "window": 3600}      # 注册：每IP每3600秒(1小时)最多5次
-    }
+    # 速率限制配置 - 从环境变量读取
+    RATE_LIMIT_CAPTCHA_LIMIT: int
+    RATE_LIMIT_CAPTCHA_WINDOW: int
+    RATE_LIMIT_EMAIL_CODE_LIMIT: int
+    RATE_LIMIT_EMAIL_CODE_WINDOW: int
+    RATE_LIMIT_REGISTER_LIMIT: int
+    RATE_LIMIT_REGISTER_WINDOW: int
+    
+    @property
+    def RATE_LIMITS(self) -> dict:
+        """动态构建速率限制配置"""
+        return {
+            "captcha": {
+                "limit": self.RATE_LIMIT_CAPTCHA_LIMIT,
+                "window": self.RATE_LIMIT_CAPTCHA_WINDOW
+            },
+            "email_code": {
+                "limit": self.RATE_LIMIT_EMAIL_CODE_LIMIT,
+                "window": self.RATE_LIMIT_EMAIL_CODE_WINDOW
+            },
+            "register": {
+                "limit": self.RATE_LIMIT_REGISTER_LIMIT,
+                "window": self.RATE_LIMIT_REGISTER_WINDOW
+            }
+        }
 
     # 邮件配置
-    SMTP_HOST: str = "smtp.gmail.com"
-    SMTP_PORT: int = 587
-    SMTP_USER: str = "your-email@gmail.com"
-    SMTP_PASSWORD: str = "your-app-password"
-    SMTP_FROM_EMAIL: str = "your-email@gmail.com"
-    SMTP_FROM_NAME: str = "RAG API"
+    SMTP_HOST: str
+    SMTP_PORT: int
+    SMTP_USER: str
+    SMTP_PASSWORD: str
+    SMTP_FROM_EMAIL: str
+    SMTP_FROM_NAME: str
+    
+    # MinIO 配置
+    MINIO_ENDPOINT: str
+    MINIO_ACCESS_KEY: str
+    MINIO_SECRET_KEY: str
+    MINIO_SECURE: bool = False
+    MINIO_DEFAULT_BUCKET: str = "default"
+    
+    # Elasticsearch 配置
+    ES_HOST: str
+    ES_USER: str = ""
+    ES_PASSWORD: str = ""
+    ES_VERIFY_CERTS: bool = False
+    ES_DEFAULT_INDEX: str = "default"
+    
+    # Kafka 配置
+    KAFKA_BOOTSTRAP_SERVERS: str
+    KAFKA_DEFAULT_TOPIC: str = "default"
     
     model_config = SettingsConfigDict(
         env_file=str(BASE_DIR / ".env"),  # 使用绝对路径

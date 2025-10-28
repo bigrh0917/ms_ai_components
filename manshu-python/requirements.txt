@@ -17,6 +17,15 @@ PyMySQL==1.1.0
 # Redis
 redis[hiredis]==5.0.1
 
+# MinIO 对象存储
+minio==7.2.0
+
+# Elasticsearch
+elasticsearch==8.10.0
+
+# Kafka
+aiokafka==0.10.0
+
 # 认证和安全
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4

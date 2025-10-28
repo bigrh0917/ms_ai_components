@@ -1,0 +1,8 @@
+# Ignore nothing (let Cursor read everything)
+!*
+
+# But explicitly allow these important files
+!.env
+!.env.example
+!config.py
+!README.md

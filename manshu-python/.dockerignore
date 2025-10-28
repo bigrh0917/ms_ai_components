@@ -33,11 +33,10 @@ ENV/
 *.swo
 *~
 
-# 环境变量
+# 环境变量（不要打包到镜像）
 .env
 .env.local
 .env.*.local
-.env.production
 
 # 日志
 logs/
@@ -52,24 +51,41 @@ logs/
 .coverage
 htmlcov/
 .tox/
-
-# MyPy
 .mypy_cache/
 .dmypy.json
 dmypy.json
 
-# Alembic
-alembic/versions/*.pyc
+# Git
+.git/
+.gitignore
+.gitattributes
 
-# 操作系统
-.DS_Store
-Thumbs.db
+# GitHub Actions
+.github/
+
+# 文档
+README.md
+README_API.md
+*.md
+
+# 测试文件
+fronttest/
+scripts/test_*.py
 
 # Docker
+Dockerfile
+.dockerignore
+docker-compose.yml
 docker-compose.override.yml
 
 # 临时文件
 *.tmp
 temp/
 tmp/
+
+# Mac
+.DS_Store
+
+# Windows
+Thumbs.db
 
