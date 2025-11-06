@@ -5,7 +5,7 @@ from typing import List, Dict, Optional, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.file import FileUpload, DocumentVector
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.clients.elasticsearch_client import es_client
 from app.services.embedding_service import embedding_service
 from app.services.permission_service import permission_service
@@ -153,8 +153,8 @@ class SearchService:
         query_vector: List[float],
         query_text: str,
         permission_filters: List[Dict[str, Any]],
-        vector_weight: float = 0.7,
-        text_weight: float = 0.3
+        vector_weight: Optional[float] = None,
+        text_weight: Optional[float] = None
     ) -> Dict[str, Any]:
         """
         构建混合检索查询（向量检索 + 全文检索）
@@ -163,12 +163,32 @@ class SearchService:
             query_vector: 查询向量
             query_text: 查询文本
             permission_filters: 权限过滤条件
-            vector_weight: 向量检索权重（默认0.7）
-            text_weight: 全文检索权重（默认0.3）
+            vector_weight: 向量检索权重（如果为None则使用配置中的值）
+            text_weight: 全文检索权重（如果为None则使用配置中的值）
             
         Returns:
             Elasticsearch查询DSL
         """
+        # 使用配置中的权重，如果没有提供参数
+        if vector_weight is None:
+            vector_weight = settings.SEARCH_VECTOR_WEIGHT
+        if text_weight is None:
+            text_weight = settings.SEARCH_TEXT_WEIGHT
+        
+        # 验证权重值（应该在合理范围内）
+        if vector_weight < 0:
+            logger.warning(f"向量权重不能为负数 ({vector_weight})，使用默认值 0.7")
+            vector_weight = 0.7
+        if text_weight < 0:
+            logger.warning(f"文本权重不能为负数 ({text_weight})，使用默认值 0.3")
+            text_weight = 0.3
+        
+        # 如果两个权重都为0，使用默认值
+        if vector_weight == 0 and text_weight == 0:
+            logger.warning("向量权重和文本权重都为0，使用默认值: vector=0.7, text=0.3")
+            vector_weight = 0.7
+            text_weight = 0.3
+        
         # 构建should子句（向量检索和全文检索）
         should_clauses = []
         
@@ -315,21 +335,28 @@ class SearchService:
             return []
         
         # 3. 获取用户可访问的标签
-        accessible_tags = await permission_service.get_user_accessible_tags(db, user)
-        logger.info(f"用户可访问的标签: {accessible_tags}")
+        # 管理员可以搜索所有文档，不需要权限过滤
+        if user.role == UserRole.ADMIN:
+            permission_filters = []  # 空列表表示不过滤（在查询中会使用 match_all）
+            logger.info("管理员用户，跳过权限过滤")
+        else:
+            accessible_tags = await permission_service.get_user_accessible_tags(db, user)
+            logger.info(f"用户可访问的标签: {accessible_tags}")
+            
+            # 4. 构建权限过滤条件
+            permission_filters = permission_service.build_elasticsearch_permission_filters(
+                user_id=user.id,
+                accessible_tags=accessible_tags
+            )
+            logger.info(f"构建的权限过滤条件 ({len(permission_filters)} 个): {permission_filters}")
         
-        # 4. 构建权限过滤条件
-        permission_filters = permission_service.build_elasticsearch_permission_filters(
-            user_id=user.id,
-            accessible_tags=accessible_tags
-        )
-        logger.info(f"构建的权限过滤条件 ({len(permission_filters)} 个): {permission_filters}")
-        
-        # 5. 构建混合检索查询
+        # 5. 构建混合检索查询（使用配置中的权重）
         es_query = SearchService.build_hybrid_query(
             query_vector=query_vector,
             query_text=query_text,
-            permission_filters=permission_filters
+            permission_filters=permission_filters,
+            vector_weight=settings.SEARCH_VECTOR_WEIGHT,
+            text_weight=settings.SEARCH_TEXT_WEIGHT
         )
         
         # 6. 执行Elasticsearch查询

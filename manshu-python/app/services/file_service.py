@@ -8,7 +8,7 @@ from sqlalchemy import select, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException, status
 from app.models.file import FileUpload, ChunkInfo, DocumentVector
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.clients.minio_client import minio_client
 from app.clients.redis_client import redis_client
 from app.clients.kafka_client import kafka_client
@@ -415,19 +415,26 @@ class FileService:
     ) -> bool:
         """
         删除文件（包括MinIO文件、数据库记录、Elasticsearch向量）
+        管理员可以删除任何文件
         
         Returns:
             bool: 是否删除成功
         """
         # 1. 查询文件记录
-        file_upload_result = await db.execute(
-            select(FileUpload).where(
-                and_(
-                    FileUpload.file_md5 == file_md5,
-                    FileUpload.user_id == user.id
+        # 如果是管理员，不需要限制 user_id
+        if user.role == UserRole.ADMIN:
+            file_upload_result = await db.execute(
+                select(FileUpload).where(FileUpload.file_md5 == file_md5)
+            )
+        else:
+            file_upload_result = await db.execute(
+                select(FileUpload).where(
+                    and_(
+                        FileUpload.file_md5 == file_md5,
+                        FileUpload.user_id == user.id
+                    )
                 )
             )
-        )
         file_record = file_upload_result.scalar_one_or_none()
         
         if not file_record:
@@ -436,8 +443,8 @@ class FileService:
                 detail="文档不存在"
             )
         
-        # 2. 权限检查（只有文件所有者可以删除）
-        if file_record.user_id != user.id:
+        # 2. 权限检查（文件所有者或管理员可以删除）
+        if file_record.user_id != user.id and user.role != UserRole.ADMIN:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="没有权限删除此文档"
@@ -464,7 +471,8 @@ class FileService:
             
             # 4. 删除MinIO中的文件
             if file_record.status == 1:  # 已合并的文件
-                file_path = minio_client.build_document_path(user.id, file_record.file_name)
+                # 使用文件所有者的 user_id 构建路径
+                file_path = minio_client.build_document_path(file_record.user_id, file_record.file_name)
                 minio_client.delete_file(
                     bucket_name=settings.MINIO_DEFAULT_BUCKET,
                     object_name=file_path
@@ -501,7 +509,17 @@ class FileService:
     ) -> List[FileUpload]:
         """
         获取用户可访问的所有文件（包括用户上传的、公开的、所属组织的）
+        管理员可以查看所有文件
         """
+        # 如果是管理员，返回所有文件
+        if user.role == UserRole.ADMIN:
+            result = await db.execute(
+                select(FileUpload)
+                .order_by(FileUpload.created_at.desc())
+            )
+            return result.scalars().all()
+        
+        # 普通用户的逻辑
         # 构建查询条件
         conditions = []
         

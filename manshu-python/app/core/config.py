@@ -120,6 +120,10 @@ class Settings(BaseSettings):
     CONVERSATION_TTL_DAYS: int = 7  # 会话过期时间（天）
     CHAT_STOP_TOKEN_TTL: int = 300  # 停止令牌有效期（秒）
     
+    # 混合检索配置
+    SEARCH_VECTOR_WEIGHT: float = 0.7  # 向量检索权重（0-1）
+    SEARCH_TEXT_WEIGHT: float = 0.3  # 全文检索权重（0-1）
+    
     # 日志配置
     DEBUG_LOG_LEVEL: str = "DEBUG"  # 开发模式日志级别: DEBUG, INFO, WARNING, ERROR, CRITICAL
     PRODUCTION_LOG_LEVEL: str = "INFO"  # 生产模式日志级别: DEBUG, INFO, WARNING, ERROR, CRITICAL

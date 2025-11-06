@@ -59,7 +59,7 @@ async def verify_websocket_token(websocket: WebSocket, token: str) -> Optional[U
         # 查询用户（需要数据库连接）
         from sqlalchemy import select
         
-        async with db_client.get_session() as db:
+        async for db in db_client.get_session():
             result = await db.execute(select(User).where(User.username == username))
             user = result.scalar_one_or_none()
             
@@ -150,7 +150,7 @@ async def websocket_chat(websocket: WebSocket, token: str):
             
             # 处理消息（流式返回）
             try:
-                async with db_client.get_session() as db:
+                async for db in db_client.get_session():
                     async for chunk in chat_service.process_message(db, user, user_message):
                         # 检查是否收到停止指令
                         try:
@@ -170,18 +170,19 @@ async def websocket_chat(websocket: WebSocket, token: str):
                         
                         # 发送内容块
                         await websocket.send_json({"chunk": chunk})
-                
-                # 发送完成通知
-                await websocket.send_json({
-                    "type": "completion",
-                    "status": "finished",
-                    "message": "响应已完成",
-                    "timestamp": int(time.time() * 1000),
-                    "date": datetime.now().isoformat()
-                })
-                
-                # 清理停止令牌
-                await redis_client.delete(f"chat:stop_token:{stop_token}")
+                    
+                    # 发送完成通知
+                    await websocket.send_json({
+                        "type": "completion",
+                        "status": "finished",
+                        "message": "响应已完成",
+                        "timestamp": int(time.time() * 1000),
+                        "date": datetime.now().isoformat()
+                    })
+                    
+                    # 清理停止令牌
+                    await redis_client.delete(f"chat:stop_token:{stop_token}")
+                    break  # 退出循环，因为我们只需要一个会话
                 
             except Exception as e:
                 logger.error(f"处理消息失败: {e}", exc_info=True)

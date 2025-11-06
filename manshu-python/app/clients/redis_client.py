@@ -5,6 +5,9 @@ import redis.asyncio as aioredis
 from redis.asyncio.connection import ConnectionPool
 from typing import Optional
 from app.core.config import settings
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class RedisClient:
@@ -49,7 +52,7 @@ class RedisClient:
                 await self.redis.set(key, value)
             return True
         except Exception as e:
-            print(f"Redis set error: {e}")
+            logger.error(f"Redis set error: {e}")
             return False
     
     async def get(self, key: str) -> Optional[str]:
@@ -57,7 +60,7 @@ class RedisClient:
         try:
             return await self.redis.get(key)
         except Exception as e:
-            print(f"Redis get error: {e}")
+            logger.error(f"Redis get error: {e}")
             return None
     
     async def delete(self, key: str) -> bool:
@@ -66,7 +69,7 @@ class RedisClient:
             await self.redis.delete(key)
             return True
         except Exception as e:
-            print(f"Redis delete error: {e}")
+            logger.error(f"Redis delete error: {e}")
             return False
     
     async def exists(self, key: str) -> bool:
@@ -74,7 +77,7 @@ class RedisClient:
         try:
             return await self.redis.exists(key) > 0
         except Exception as e:
-            print(f"Redis exists error: {e}")
+            logger.error(f"Redis exists error: {e}")
             return False
     
     async def incr(self, key: str, expire: int = None) -> int:
@@ -85,7 +88,7 @@ class RedisClient:
                 await self.redis.expire(key, expire)
             return count
         except Exception as e:
-            print(f"Redis incr error: {e}")
+            logger.error(f"Redis incr error: {e}")
             return 0
     
     async def ttl(self, key: str) -> int:
@@ -93,7 +96,7 @@ class RedisClient:
         try:
             return await self.redis.ttl(key)
         except Exception as e:
-            print(f"Redis ttl error: {e}")
+            logger.error(f"Redis ttl error: {e}")
             return -1
 
     # ========================= BitSet 扩展（分片上传跟踪） =========================
@@ -107,7 +110,7 @@ class RedisClient:
             # aioredis 返回 int（旧值）
             return int(await self.redis.setbit(key, offset, value))
         except Exception as e:
-            print(f"Redis setbit error: {e}")
+            logger.error(f"Redis setbit error: {e}")
             return 0
 
     async def get_bit(self, key: str, offset: int) -> int:
@@ -117,7 +120,7 @@ class RedisClient:
         try:
             return int(await self.redis.getbit(key, offset))
         except Exception as e:
-            print(f"Redis getbit error: {e}")
+            logger.error(f"Redis getbit error: {e}")
             return 0
 
     async def bitcount(self, key: str) -> int:
@@ -127,7 +130,7 @@ class RedisClient:
         try:
             return int(await self.redis.bitcount(key))
         except Exception as e:
-            print(f"Redis bitcount error: {e}")
+            logger.error(f"Redis bitcount error: {e}")
             return 0
 
     async def get_bitmap_progress(self, key: str, total_bits: int) -> float:
@@ -143,7 +146,7 @@ class RedisClient:
             done = await self.bitcount(key)
             return min(1.0, max(0.0, done / float(total_bits)))
         except Exception as e:
-            print(f"Redis bitmap progress error: {e}")
+            logger.error(f"Redis bitmap progress error: {e}")
             return 0.0
 
     async def clear_bitmap(self, key: str) -> bool:
@@ -158,7 +161,7 @@ class RedisClient:
             await self.redis.ping()
             return True
         except Exception as e:
-            print(f"Redis 健康检查失败: {e}")
+            logger.error(f"Redis 健康检查失败: {e}")
             return False
     
     def get_pool_status(self) -> dict:

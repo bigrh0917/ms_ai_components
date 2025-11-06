@@ -4,7 +4,7 @@
 from typing import List, Set, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.organization import OrganizationTag
 from app.utils.logger import get_logger
 
@@ -153,6 +153,10 @@ class PermissionService:
         Returns:
             True表示有权限，False表示无权限
         """
+        # 管理员可以访问所有文件
+        if user.role == UserRole.ADMIN:
+            return True
+        
         # 1. 用户自己上传的文档
         if file_user_id == user.id:
             return True
@@ -190,8 +194,13 @@ class PermissionService:
             True表示有权限，False表示无权限
             
         Note:
-            只有文件所有者可以删除文件
+            文件所有者或管理员可以删除文件
         """
+        # 管理员可以删除任何文件
+        if user.role == UserRole.ADMIN:
+            return True
+        
+        # 文件所有者可以删除
         return file_user_id == user.id
 
 

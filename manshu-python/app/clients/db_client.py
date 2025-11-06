@@ -6,6 +6,9 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from typing import AsyncGenerator
 from app.core.config import settings
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class DatabaseClient:
@@ -77,7 +80,7 @@ class DatabaseClient:
                 result.scalar()
                 return True
         except Exception as e:
-            print(f"数据库健康检查失败: {e}")
+            logger.error(f"数据库健康检查失败: {e}")
             return False
     
     def get_pool_status(self) -> dict:

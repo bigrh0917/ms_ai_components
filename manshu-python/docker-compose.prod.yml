@@ -1,4 +1,4 @@
-# Docker Compose 配置 - 用于本地开发和测试
+# Docker Compose 配置 - 生产环境
 version: '3.8'
 
 services:
@@ -7,11 +7,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: fastapi-app-local
+    container_name: fastapi-app-prod
     ports:
       - "8000:8000"
     env_file:
-      - .env
+      - .env.production
     environment:
       # 覆盖数据库和Redis连接地址为Docker服务名
       - DATABASE_HOST=mysql
@@ -19,6 +19,7 @@ services:
       - ES_HOST=http://elasticsearch:9200
       - MINIO_ENDPOINT=minio:9000
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - WORKERS=8  # 生产环境可以设置更多workers
     depends_on:
       mysql:
         condition: service_healthy
@@ -30,7 +31,7 @@ services:
         condition: service_started
     volumes:
       - ./logs:/app/logs
-    restart: unless-stopped
+    restart: always
     networks:
       - app-network
     healthcheck:
@@ -39,21 +40,29 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
 
   # MySQL 数据库
   mysql:
     image: mysql:8.0
-    container_name: fastapi-mysql
+    container_name: fastapi-mysql-prod
     environment:
-      MYSQL_ROOT_PASSWORD: ${DATABASE_PASSWORD:-123456}
-      MYSQL_DATABASE: ${DATABASE_NAME:-fastapi}
+      MYSQL_ROOT_PASSWORD: ${DATABASE_PASSWORD}
+      MYSQL_DATABASE: ${DATABASE_NAME}
       MYSQL_CHARACTER_SET_SERVER: utf8mb4
       MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
     ports:
       - "3306:3306"
     volumes:
-      - mysql-data:/var/lib/mysql
-    restart: unless-stopped
+      - mysql-data-prod:/var/lib/mysql
+    restart: always
     networks:
       - app-network
     healthcheck:
@@ -61,16 +70,21 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
 
   # Redis 缓存
   redis:
     image: redis:7-alpine
-    container_name: fastapi-redis
+    container_name: fastapi-redis-prod
     ports:
       - "6379:6379"
     volumes:
-      - redis-data:/data
-    restart: unless-stopped
+      - redis-data-prod:/data
+    restart: always
     networks:
       - app-network
     healthcheck:
@@ -78,16 +92,21 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
 
   # Elasticsearch 搜索引擎
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
-    container_name: fastapi-elasticsearch
+    container_name: fastapi-elasticsearch-prod
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
       - bootstrap.memory_lock=true
     ulimits:
       memlock:
@@ -95,10 +114,9 @@ services:
         hard: -1
     ports:
       - "9200:9200"
-      - "9300:9300"
     volumes:
-      - elasticsearch-data:/usr/share/elasticsearch/data
-    restart: unless-stopped
+      - elasticsearch-data-prod:/usr/share/elasticsearch/data
+    restart: always
     networks:
       - app-network
     healthcheck:
@@ -107,21 +125,26 @@ services:
       timeout: 10s
       retries: 5
       start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
 
   # MinIO 对象存储
   minio:
     image: minio/minio:latest
-    container_name: fastapi-minio
+    container_name: fastapi-minio-prod
     environment:
-      - MINIO_ROOT_USER=${MINIO_ACCESS_KEY:-minioadmin}
-      - MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY:-minioadmin}
+      - MINIO_ROOT_USER=${MINIO_ACCESS_KEY}
+      - MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY}
     ports:
       - "9000:9000"
       - "9001:9001"
     volumes:
-      - minio-data:/data
+      - minio-data-prod:/data
     command: server /data --console-address ":9001"
-    restart: unless-stopped
+    restart: always
     networks:
       - app-network
     healthcheck:
@@ -130,11 +153,16 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
 
-  # Kafka 消息队列（可选）
+  # Kafka 消息队列
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
-    container_name: fastapi-zookeeper
+    container_name: fastapi-zookeeper-prod
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
@@ -142,11 +170,11 @@ services:
       - "2181:2181"
     networks:
       - app-network
-    restart: unless-stopped
+    restart: always
 
   kafka:
     image: confluentinc/cp-kafka:7.5.0
-    container_name: fastapi-kafka
+    container_name: fastapi-kafka-prod
     depends_on:
       - zookeeper
     ports:
@@ -160,22 +188,27 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
     networks:
       - app-network
-    restart: unless-stopped
+    restart: always
     healthcheck:
       test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
 
 volumes:
-  mysql-data:
+  mysql-data-prod:
     driver: local
-  redis-data:
+  redis-data-prod:
     driver: local
-  elasticsearch-data:
+  elasticsearch-data-prod:
     driver: local
-  minio-data:
+  minio-data-prod:
     driver: local
 
 networks:

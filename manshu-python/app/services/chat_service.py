@@ -143,8 +143,22 @@ class ChatService:
                 logger.info(f"OpenAI响应完成，共 {chunk_count} 个chunk，总长度 {len(assistant_content)}")
                 
             except Exception as e:
-                logger.error(f"OpenAI API调用失败: {e}", exc_info=True)
-                error_msg = "抱歉，AI服务暂时不可用，请稍后重试。"
+                error_type = type(e).__name__
+                error_detail = str(e)
+                logger.error(f"OpenAI API调用失败: {error_type}: {error_detail}", exc_info=True)
+                
+                # 根据错误类型提供更具体的错误消息
+                if "rate_limit" in error_detail.lower() or "RateLimitError" in error_type:
+                    error_msg = "AI服务请求过于频繁，请稍后重试。"
+                elif "authentication" in error_detail.lower() or "AuthenticationError" in error_type:
+                    error_msg = "AI服务认证失败，请联系管理员。"
+                elif "timeout" in error_detail.lower() or "Timeout" in error_type:
+                    error_msg = "AI服务响应超时，请稍后重试。"
+                elif "connection" in error_detail.lower() or "Connection" in error_type:
+                    error_msg = "无法连接到AI服务，请检查网络连接。"
+                else:
+                    error_msg = f"AI服务暂时不可用: {error_detail[:100]}（错误类型: {error_type}）"
+                
                 yield error_msg
                 assistant_content = error_msg
             
@@ -155,8 +169,21 @@ class ChatService:
                 )
             
         except Exception as e:
-            logger.error(f"处理用户消息失败: {e}", exc_info=True)
-            yield f"处理消息时出错: {str(e)}"
+            error_type = type(e).__name__
+            error_detail = str(e)
+            logger.error(f"处理用户消息失败: {error_type}: {error_detail}", exc_info=True)
+            
+            # 根据错误类型提供更具体的错误消息
+            if "archived" in error_detail.lower():
+                yield "该会话已归档，无法继续对话。请创建新会话。"
+            elif "database" in error_detail.lower() or "Database" in error_type:
+                yield "数据库操作失败，请稍后重试。如果问题持续，请联系管理员。"
+            elif "embedding" in error_detail.lower() or "Embedding" in error_type:
+                yield "文本向量化失败，请重试或联系管理员。"
+            elif "search" in error_detail.lower() or "Search" in error_type:
+                yield "知识库检索失败，请稍后重试。"
+            else:
+                yield f"处理消息时出错: {error_detail[:100]}（错误类型: {error_type}）"
     
     async def get_conversation_history(
         self,

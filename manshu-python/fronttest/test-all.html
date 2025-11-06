@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>用户模块功能测试</title>
+    <title>RAG系统功能测试</title>
     <style>
         * {
             margin: 0;
@@ -18,7 +18,7 @@
         }
         
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
         }
         
@@ -82,12 +82,17 @@
             color: #666;
         }
         
-        .form-group input {
+        .form-group input, .form-group select, .form-group textarea {
             width: 100%;
             padding: 8px;
             border: 1px solid #ddd;
             border-radius: 4px;
             font-size: 14px;
+        }
+        
+        .form-group textarea {
+            min-height: 60px;
+            resize: vertical;
         }
         
         .captcha-group {
@@ -151,6 +156,15 @@
             background: #5a6268;
         }
         
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #c82333;
+        }
+        
         .btn-secondary:disabled {
             background: #ccc;
             cursor: not-allowed;
@@ -205,11 +219,68 @@
             display: block;
             margin-bottom: 5px;
         }
+        
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: #667eea;
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+        }
+        
+        .chat-container {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            max-height: 300px;
+            overflow-y: auto;
+            background: #f8f9fa;
+            margin-bottom: 10px;
+        }
+        
+        .chat-message {
+            margin-bottom: 10px;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        
+        .chat-message.user {
+            background: #e3f2fd;
+            text-align: right;
+        }
+        
+        .chat-message.assistant {
+            background: #f1f8e9;
+        }
+        
+        .file-list-item {
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .file-list-item:last-child {
+            border-bottom: none;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>用户模块功能测试</h1>
+        <h1>RAG系统功能测试</h1>
         
         <div class="api-config">
             <label>API 基础地址：</label>
@@ -217,7 +288,7 @@
         </div>
         
         <div class="sections">
-            <!-- 注册区域 -->
+            <!-- 认证模块 -->
             <div class="section">
                 <h2>1. 用户注册</h2>
                 <div id="registerMsg" class="message"></div>
@@ -251,7 +322,6 @@
                 <div id="registerResult" class="result" style="display: none;"></div>
             </div>
             
-            <!-- 登录区域 -->
             <div class="section">
                 <h2>2. 用户登录</h2>
                 <div id="loginMsg" class="message"></div>
@@ -271,7 +341,6 @@
                 <div id="loginResult" class="result" style="display: none;"></div>
             </div>
             
-            <!-- 获取用户信息 -->
             <div class="section">
                 <h2>3. 获取当前用户信息</h2>
                 <div id="meMsg" class="message"></div>
@@ -279,7 +348,6 @@
                 <div id="meResult" class="result" style="display: none;"></div>
             </div>
             
-            <!-- 用户列表 -->
             <div class="section">
                 <h2>4. 获取用户列表</h2>
                 <div id="listMsg" class="message"></div>
@@ -302,6 +370,236 @@
                 <button class="btn-primary" onclick="getUserList()" style="width: 100%;">查询</button>
                 <div id="listResult" class="result" style="display: none;"></div>
             </div>
+            
+            <!-- 文件上传模块 -->
+            <div class="section">
+                <h2>5. 文件上传</h2>
+                <div id="uploadMsg" class="message"></div>
+                <div class="form-group">
+                    <label>选择文件：</label>
+                    <input type="file" id="uploadFile">
+                </div>
+                <div class="form-group">
+                    <label>组织标签（可选）：</label>
+                    <input type="text" id="uploadOrgTag" placeholder="组织标签ID">
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="uploadIsPublic"> 公开文件
+                    </label>
+                </div>
+                <div class="progress-bar" id="uploadProgress" style="display: none;">
+                    <div class="progress-fill" id="uploadProgressFill" style="width: 0%;">0%</div>
+                </div>
+                <button class="btn-primary" onclick="uploadFile()" style="width: 100%;">上传文件</button>
+                <div id="uploadResult" class="result" style="display: none;"></div>
+            </div>
+            
+            <div class="section">
+                <h2>6. 查询上传状态</h2>
+                <div id="statusMsg" class="message"></div>
+                <div class="form-group">
+                    <label>文件MD5：</label>
+                    <input type="text" id="statusFileMd5" placeholder="输入文件MD5值">
+                </div>
+                <button class="btn-primary" onclick="getUploadStatus()" style="width: 100%;">查询状态</button>
+                <div id="statusResult" class="result" style="display: none;"></div>
+            </div>
+            
+            <div class="section">
+                <h2>7. 合并文件</h2>
+                <div id="mergeMsg" class="message"></div>
+                <div class="form-group">
+                    <label>文件MD5：</label>
+                    <input type="text" id="mergeFileMd5" placeholder="输入文件MD5值">
+                </div>
+                <div class="form-group">
+                    <label>文件名：</label>
+                    <input type="text" id="mergeFileName" placeholder="输入文件名">
+                </div>
+                <button class="btn-primary" onclick="mergeFile()" style="width: 100%;">合并文件</button>
+                <div id="mergeResult" class="result" style="display: none;"></div>
+            </div>
+            
+            <!-- 文件管理模块 -->
+            <div class="section">
+                <h2>8. 获取可访问文件列表</h2>
+                <div id="filesMsg" class="message"></div>
+                <button class="btn-primary" onclick="getAccessibleFiles()" style="width: 100%;">获取文件列表</button>
+                <div id="filesResult" class="result" style="display: none;"></div>
+            </div>
+            
+            <div class="section">
+                <h2>9. 获取用户上传的文件</h2>
+                <div id="myFilesMsg" class="message"></div>
+                <button class="btn-primary" onclick="getMyUploadedFiles()" style="width: 100%;">获取我的文件</button>
+                <div id="myFilesResult" class="result" style="display: none;"></div>
+            </div>
+            
+            <div class="section">
+                <h2>10. 删除文件</h2>
+                <div id="deleteFileMsg" class="message"></div>
+                <div class="form-group">
+                    <label>文件MD5：</label>
+                    <input type="text" id="deleteFileMd5" placeholder="输入文件MD5值">
+                </div>
+                <button class="btn-danger" onclick="deleteFile()" style="width: 100%;">删除文件</button>
+                <div id="deleteFileResult" class="result" style="display: none;"></div>
+            </div>
+            
+            <!-- 文档检索模块 -->
+            <div class="section">
+                <h2>11. 混合检索</h2>
+                <div id="searchMsg" class="message"></div>
+                <div class="form-group">
+                    <label>查询文本：</label>
+                    <input type="text" id="searchQuery" placeholder="输入查询内容">
+                </div>
+                <div class="form-group">
+                    <label>返回数量：</label>
+                    <input type="number" id="searchTopK" value="10" min="1" max="100">
+                </div>
+                <button class="btn-primary" onclick="hybridSearch()" style="width: 100%;">搜索</button>
+                <div id="searchResult" class="result" style="display: none;"></div>
+            </div>
+            
+            <!-- 聊天模块 -->
+            <div class="section">
+                <h2>12. WebSocket聊天</h2>
+                <div id="chatMsg" class="message"></div>
+                <div class="form-group">
+                    <label>消息：</label>
+                    <textarea id="chatMessage" placeholder="输入消息（按Enter发送，Shift+Enter换行）"></textarea>
+                </div>
+                <div class="button-group">
+                    <button class="btn-primary" onclick="startChat()" id="chatStartBtn">开始聊天</button>
+                    <button class="btn-primary" onclick="sendChatMessage()" id="chatSendBtn" disabled>发送消息</button>
+                    <button class="btn-secondary" onclick="stopChat()" id="chatStopBtn" disabled>停止</button>
+                </div>
+                <div class="chat-container" id="chatContainer"></div>
+                <div id="chatResult" class="result" style="display: none;"></div>
+            </div>
+            
+            <div class="section">
+                <h2>13. 获取会话历史</h2>
+                <div id="historyMsg" class="message"></div>
+                <div class="form-group">
+                    <label>开始日期（可选）：</label>
+                    <input type="datetime-local" id="historyStartDate">
+                </div>
+                <div class="form-group">
+                    <label>结束日期（可选）：</label>
+                    <input type="datetime-local" id="historyEndDate">
+                </div>
+                <button class="btn-primary" onclick="getConversationHistory()" style="width: 100%;">获取历史</button>
+                <div id="historyResult" class="result" style="display: none;"></div>
+            </div>
+            
+            <!-- 管理员模块 -->
+            <div class="section">
+                <h2>14. 创建组织标签</h2>
+                <div id="createTagMsg" class="message"></div>
+                <div class="form-group">
+                    <label>标签ID：</label>
+                    <input type="text" id="createTagId" placeholder="标签ID（唯一）">
+                </div>
+                <div class="form-group">
+                    <label>标签名称：</label>
+                    <input type="text" id="createTagName" placeholder="标签名称">
+                </div>
+                <div class="form-group">
+                    <label>标签描述（可选）：</label>
+                    <input type="text" id="createTagDesc" placeholder="标签描述">
+                </div>
+                <div class="form-group">
+                    <label>父标签ID（可选）：</label>
+                    <input type="text" id="createTagParent" placeholder="父标签ID">
+                </div>
+                <button class="btn-primary" onclick="createOrgTag()" style="width: 100%;">创建标签</button>
+                <div id="createTagResult" class="result" style="display: none;"></div>
+            </div>
+            
+            <div class="section">
+                <h2>15. 分配组织标签</h2>
+                <div id="assignTagMsg" class="message"></div>
+                <div class="form-group">
+                    <label>用户ID：</label>
+                    <input type="number" id="assignUserId" placeholder="用户ID">
+                </div>
+                <div class="form-group">
+                    <label>组织标签（逗号分隔）：</label>
+                    <input type="text" id="assignOrgTags" placeholder="tag1,tag2,tag3">
+                </div>
+                <button class="btn-primary" onclick="assignOrgTags()" style="width: 100%;">分配标签</button>
+                <div id="assignTagResult" class="result" style="display: none;"></div>
+            </div>
+            
+            <div class="section">
+                <h2>16. 设置主组织</h2>
+                <div id="primaryOrgMsg" class="message"></div>
+                <div class="form-group">
+                    <label>用户ID：</label>
+                    <input type="number" id="primaryOrgUserId" placeholder="用户ID">
+                </div>
+                <div class="form-group">
+                    <label>主组织标签ID：</label>
+                    <input type="text" id="primaryOrgTag" placeholder="主组织标签ID">
+                </div>
+                <button class="btn-primary" onclick="setPrimaryOrg()" style="width: 100%;">设置主组织</button>
+                <div id="primaryOrgResult" class="result" style="display: none;"></div>
+            </div>
+            
+            <div class="section">
+                <h2>17. 获取用户组织标签</h2>
+                <div id="userTagsMsg" class="message"></div>
+                <div class="form-group">
+                    <label>用户ID：</label>
+                    <input type="number" id="userTagsUserId" placeholder="用户ID">
+                </div>
+                <button class="btn-primary" onclick="getUserOrgTags()" style="width: 100%;">获取标签</button>
+                <div id="userTagsResult" class="result" style="display: none;"></div>
+            </div>
+            
+            <div class="section">
+                <h2>18. 获取组织标签树</h2>
+                <div id="tagTreeMsg" class="message"></div>
+                <button class="btn-primary" onclick="getOrgTagTree()" style="width: 100%;">获取标签树</button>
+                <div id="tagTreeResult" class="result" style="display: none;"></div>
+            </div>
+            
+            <div class="section">
+                <h2>19. 更新组织标签</h2>
+                <div id="updateTagMsg" class="message"></div>
+                <div class="form-group">
+                    <label>标签ID：</label>
+                    <input type="text" id="updateTagId" placeholder="要更新的标签ID">
+                </div>
+                <div class="form-group">
+                    <label>新标签名称（可选）：</label>
+                    <input type="text" id="updateTagName" placeholder="新标签名称">
+                </div>
+                <div class="form-group">
+                    <label>新标签描述（可选）：</label>
+                    <input type="text" id="updateTagDesc" placeholder="新标签描述">
+                </div>
+                <div class="form-group">
+                    <label>新父标签ID（可选）：</label>
+                    <input type="text" id="updateTagParent" placeholder="新父标签ID">
+                </div>
+                <button class="btn-primary" onclick="updateOrgTag()" style="width: 100%;">更新标签</button>
+                <div id="updateTagResult" class="result" style="display: none;"></div>
+            </div>
+            
+            <div class="section">
+                <h2>20. 删除组织标签</h2>
+                <div id="deleteTagMsg" class="message"></div>
+                <div class="form-group">
+                    <label>标签ID：</label>
+                    <input type="text" id="deleteTagId" placeholder="要删除的标签ID">
+                </div>
+                <button class="btn-danger" onclick="deleteOrgTag()" style="width: 100%;">删除标签</button>
+                <div id="deleteTagResult" class="result" style="display: none;"></div>
+            </div>
         </div>
     </div>
 
@@ -310,9 +608,17 @@
         let regCaptchaId = '';
         let regTempToken = '';
         let regCountdown = 0;
+        let chatWebSocket = null;
+        let chatStopToken = '';
         
         function getApiBase() {
             return document.getElementById('apiBase').value;
+        }
+        
+        function getWsBase() {
+            const apiBase = getApiBase();
+            // 将 http:// 转换为 ws://，https:// 转换为 wss://
+            return apiBase.replace(/^http/, 'ws');
         }
         
         function showMessage(id, text, type = 'success') {
@@ -330,7 +636,7 @@
             result.style.display = 'block';
         }
         
-        // 获取图形验证码
+        // ========== 认证模块 ==========
         async function getCaptcha(type) {
             try {
                 const response = await fetch(`${getApiBase()}/auth/captcha`);
@@ -349,7 +655,6 @@
             }
         }
         
-        // 发送邮箱验证码
         async function sendEmailCode(type) {
             const email = document.getElementById('regEmail').value;
             const captchaCode = document.getElementById('regCaptchaCode').value;
@@ -390,7 +695,6 @@
             }
         }
         
-        // 倒计时
         function startCountdown() {
             regCountdown = 60;
             const btn = document.getElementById('regSendBtn');
@@ -408,7 +712,6 @@
             }, 1000);
         }
         
-        // 注册
         async function register() {
             const username = document.getElementById('regUsername').value;
             const email = document.getElementById('regEmail').value;
@@ -454,7 +757,6 @@
             }
         }
         
-        // 登录
         async function login() {
             const username = document.getElementById('loginUsername').value;
             const password = document.getElementById('loginPassword').value;
@@ -490,7 +792,6 @@
             }
         }
         
-        // 更新 Token 显示
         function updateTokenDisplay() {
             if (currentToken) {
                 document.getElementById('tokenDisplay').style.display = 'block';
@@ -498,7 +799,6 @@
             }
         }
         
-        // 获取当前用户信息
         async function getCurrentUser() {
             if (!currentToken) {
                 showMessage('meMsg', '请先登录', 'error');
@@ -530,7 +830,6 @@
             }
         }
         
-        // 获取用户列表
         async function getUserList() {
             if (!currentToken) {
                 showMessage('listMsg', '请先登录', 'error');
@@ -571,6 +870,724 @@
             }
         }
         
+        // ========== 文件上传模块 ==========
+        async function uploadFile() {
+            if (!currentToken) {
+                showMessage('uploadMsg', '请先登录', 'error');
+                return;
+            }
+            
+            const fileInput = document.getElementById('uploadFile');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                showMessage('uploadMsg', '请选择文件', 'error');
+                return;
+            }
+            
+            const orgTag = document.getElementById('uploadOrgTag').value;
+            const isPublic = document.getElementById('uploadIsPublic').checked;
+            
+            try {
+                // 计算MD5（简化版，实际应该使用更可靠的方法）
+                const fileData = await file.arrayBuffer();
+                const hashBuffer = await crypto.subtle.digest('SHA-256', fileData);
+                const hashArray = Array.from(new Uint8Array(hashBuffer));
+                const fileMd5 = hashArray.map(b => b.toString(16).padStart(2, '0')).join('').substring(0, 32);
+                
+                const chunkSize = 2 * 1024 * 1024; // 2MB
+                const totalChunks = Math.ceil(file.size / chunkSize);
+                
+                document.getElementById('uploadProgress').style.display = 'block';
+                document.getElementById('uploadProgressFill').style.width = '0%';
+                document.getElementById('uploadProgressFill').textContent = '0%';
+                
+                // 上传所有分片
+                for (let i = 0; i < totalChunks; i++) {
+                    const start = i * chunkSize;
+                    const end = Math.min(start + chunkSize, file.size);
+                    const chunk = file.slice(start, end);
+                    
+                    const formData = new FormData();
+                    formData.append('file', chunk);
+                    formData.append('fileMd5', fileMd5);
+                    formData.append('chunkIndex', i);
+                    formData.append('totalSize', file.size);
+                    formData.append('fileName', file.name);
+                    formData.append('totalChunks', totalChunks);
+                    if (orgTag) formData.append('orgTag', orgTag);
+                    formData.append('isPublic', isPublic);
+                    
+                    const response = await fetch(`${getApiBase()}/upload/chunk`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${currentToken}`
+                        },
+                        body: formData
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (!response.ok) {
+                        throw new Error(data.detail || '上传失败');
+                    }
+                    
+                    const progress = ((i + 1) / totalChunks) * 100;
+                    document.getElementById('uploadProgressFill').style.width = progress + '%';
+                    document.getElementById('uploadProgressFill').textContent = Math.round(progress) + '%';
+                }
+                
+                showMessage('uploadMsg', '所有分片上传成功！文件MD5: ' + fileMd5, 'success');
+                document.getElementById('statusFileMd5').value = fileMd5;
+                document.getElementById('mergeFileMd5').value = fileMd5;
+                document.getElementById('mergeFileName').value = file.name;
+                showResult('uploadResult', { fileMd5, fileName: file.name, totalChunks });
+                
+            } catch (error) {
+                showMessage('uploadMsg', '上传失败: ' + error.message, 'error');
+            }
+        }
+        
+        async function getUploadStatus() {
+            if (!currentToken) {
+                showMessage('statusMsg', '请先登录', 'error');
+                return;
+            }
+            
+            const fileMd5 = document.getElementById('statusFileMd5').value;
+            if (!fileMd5) {
+                showMessage('statusMsg', '请输入文件MD5', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${getApiBase()}/upload/status?file_md5=${fileMd5}`, {
+                    headers: {
+                        'Authorization': `Bearer ${currentToken}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage('statusMsg', `上传进度: ${data.data.progress}%`, 'success');
+                    showResult('statusResult', data);
+                } else {
+                    showMessage('statusMsg', data.detail || '查询失败', 'error');
+                    showResult('statusResult', data);
+                }
+            } catch (error) {
+                showMessage('statusMsg', '网络错误: ' + error.message, 'error');
+            }
+        }
+        
+        async function mergeFile() {
+            if (!currentToken) {
+                showMessage('mergeMsg', '请先登录', 'error');
+                return;
+            }
+            
+            const fileMd5 = document.getElementById('mergeFileMd5').value;
+            const fileName = document.getElementById('mergeFileName').value;
+            
+            if (!fileMd5 || !fileName) {
+                showMessage('mergeMsg', '请填写文件MD5和文件名', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${getApiBase()}/upload/merge`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentToken}`
+                    },
+                    body: JSON.stringify({
+                        file_md5: fileMd5,
+                        file_name: fileName
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage('mergeMsg', '文件合并成功！', 'success');
+                    showResult('mergeResult', data);
+                } else {
+                    showMessage('mergeMsg', data.detail || '合并失败', 'error');
+                    showResult('mergeResult', data);
+                }
+            } catch (error) {
+                showMessage('mergeMsg', '网络错误: ' + error.message, 'error');
+            }
+        }
+        
+        // ========== 文件管理模块 ==========
+        async function getAccessibleFiles() {
+            if (!currentToken) {
+                showMessage('filesMsg', '请先登录', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${getApiBase()}/documents/accessible`, {
+                    headers: {
+                        'Authorization': `Bearer ${currentToken}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage('filesMsg', `获取成功，共 ${data.data.length} 个文件`, 'success');
+                    showResult('filesResult', data);
+                } else {
+                    showMessage('filesMsg', data.detail || '获取失败', 'error');
+                    showResult('filesResult', data);
+                }
+            } catch (error) {
+                showMessage('filesMsg', '网络错误: ' + error.message, 'error');
+            }
+        }
+        
+        async function getMyUploadedFiles() {
+            if (!currentToken) {
+                showMessage('myFilesMsg', '请先登录', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${getApiBase()}/documents/uploads`, {
+                    headers: {
+                        'Authorization': `Bearer ${currentToken}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage('myFilesMsg', `获取成功，共 ${data.data.length} 个文件`, 'success');
+                    showResult('myFilesResult', data);
+                } else {
+                    showMessage('myFilesMsg', data.detail || '获取失败', 'error');
+                    showResult('myFilesResult', data);
+                }
+            } catch (error) {
+                showMessage('myFilesMsg', '网络错误: ' + error.message, 'error');
+            }
+        }
+        
+        async function deleteFile() {
+            if (!currentToken) {
+                showMessage('deleteFileMsg', '请先登录', 'error');
+                return;
+            }
+            
+            const fileMd5 = document.getElementById('deleteFileMd5').value;
+            if (!fileMd5) {
+                showMessage('deleteFileMsg', '请输入文件MD5', 'error');
+                return;
+            }
+            
+            if (!confirm('确定要删除这个文件吗？')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${getApiBase()}/documents/${fileMd5}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${currentToken}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage('deleteFileMsg', '文件删除成功', 'success');
+                    showResult('deleteFileResult', data);
+                } else {
+                    showMessage('deleteFileMsg', data.detail || '删除失败', 'error');
+                    showResult('deleteFileResult', data);
+                }
+            } catch (error) {
+                showMessage('deleteFileMsg', '网络错误: ' + error.message, 'error');
+            }
+        }
+        
+        // ========== 文档检索模块 ==========
+        async function hybridSearch() {
+            if (!currentToken) {
+                showMessage('searchMsg', '请先登录', 'error');
+                return;
+            }
+            
+            const query = document.getElementById('searchQuery').value;
+            const topK = document.getElementById('searchTopK').value || 10;
+            
+            if (!query) {
+                showMessage('searchMsg', '请输入查询内容', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${getApiBase()}/search/hybrid?query=${encodeURIComponent(query)}&topK=${topK}`, {
+                    headers: {
+                        'Authorization': `Bearer ${currentToken}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage('searchMsg', `搜索成功，找到 ${data.data.length} 个结果`, 'success');
+                    showResult('searchResult', data);
+                } else {
+                    showMessage('searchMsg', data.detail || '搜索失败', 'error');
+                    showResult('searchResult', data);
+                }
+            } catch (error) {
+                showMessage('searchMsg', '网络错误: ' + error.message, 'error');
+            }
+        }
+        
+        // ========== 聊天模块 ==========
+        async function startChat() {
+            if (!currentToken) {
+                showMessage('chatMsg', '请先登录', 'error');
+                return;
+            }
+            
+            if (chatWebSocket && chatWebSocket.readyState === WebSocket.OPEN) {
+                showMessage('chatMsg', '聊天已在进行中', 'error');
+                return;
+            }
+            
+            try {
+                // 获取WebSocket Token
+                const tokenResponse = await fetch(`${getApiBase()}/chat/websocket-token`, {
+                    headers: {
+                        'Authorization': `Bearer ${currentToken}`
+                    }
+                });
+                
+                const tokenData = await tokenResponse.json();
+                
+                if (!tokenResponse.ok) {
+                    throw new Error(tokenData.detail || '获取WebSocket Token失败');
+                }
+                
+                chatStopToken = tokenData.data.cmdToken;
+                
+                // 建立WebSocket连接
+                const wsUrl = `${getWsBase()}/chat/${currentToken}`;
+                chatWebSocket = new WebSocket(wsUrl);
+                
+                chatWebSocket.onopen = () => {
+                    showMessage('chatMsg', 'WebSocket连接已建立', 'success');
+                    document.getElementById('chatStartBtn').disabled = true;
+                    document.getElementById('chatSendBtn').disabled = false;
+                    document.getElementById('chatStopBtn').disabled = false;
+                };
+                
+                chatWebSocket.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        
+                        if (data.chunk) {
+                            // 流式内容块
+                            appendChatMessage('assistant', data.chunk, true);
+                        } else if (data.type === 'completion') {
+                            // 完成通知
+                            appendChatMessage('assistant', '\n[响应完成]', false);
+                        } else if (data.type === 'stop') {
+                            // 停止确认
+                            appendChatMessage('system', '[响应已停止]', false);
+                        } else if (data.error) {
+                            // 错误
+                            appendChatMessage('system', '[错误: ' + data.error + ']', false);
+                        }
+                    } catch (e) {
+                        // 纯文本消息
+                        appendChatMessage('assistant', event.data, true);
+                    }
+                };
+                
+                chatWebSocket.onerror = (error) => {
+                    showMessage('chatMsg', 'WebSocket错误', 'error');
+                    console.error('WebSocket error:', error);
+                };
+                
+                chatWebSocket.onclose = () => {
+                    showMessage('chatMsg', 'WebSocket连接已关闭', 'success');
+                    document.getElementById('chatStartBtn').disabled = false;
+                    document.getElementById('chatSendBtn').disabled = true;
+                    document.getElementById('chatStopBtn').disabled = true;
+                    chatWebSocket = null;
+                };
+                
+            } catch (error) {
+                showMessage('chatMsg', '启动聊天失败: ' + error.message, 'error');
+            }
+        }
+        
+        function stopChat() {
+            if (chatWebSocket && chatWebSocket.readyState === WebSocket.OPEN) {
+                chatWebSocket.send(JSON.stringify({
+                    type: 'stop',
+                    _internal_cmd_token: chatStopToken
+                }));
+            }
+        }
+        
+        function sendChatMessage() {
+            const message = document.getElementById('chatMessage').value;
+            if (!message || !chatWebSocket || chatWebSocket.readyState !== WebSocket.OPEN) {
+                return;
+            }
+            
+            appendChatMessage('user', message, false);
+            chatWebSocket.send(message);
+            document.getElementById('chatMessage').value = '';
+        }
+        
+        function appendChatMessage(role, content, append) {
+            const container = document.getElementById('chatContainer');
+            let messageEl = null;
+            
+            if (append && container.lastElementChild && container.lastElementChild.classList.contains(role)) {
+                messageEl = container.lastElementChild;
+            } else {
+                messageEl = document.createElement('div');
+                messageEl.className = `chat-message ${role}`;
+                container.appendChild(messageEl);
+            }
+            
+            if (append) {
+                messageEl.textContent += content;
+            } else {
+                messageEl.textContent = content;
+            }
+            
+            container.scrollTop = container.scrollHeight;
+        }
+        
+        // 允许按Enter发送消息
+        document.getElementById('chatMessage').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendChatMessage();
+            }
+        });
+        
+        async function getConversationHistory() {
+            if (!currentToken) {
+                showMessage('historyMsg', '请先登录', 'error');
+                return;
+            }
+            
+            const startDate = document.getElementById('historyStartDate').value;
+            const endDate = document.getElementById('historyEndDate').value;
+            
+            let url = `${getApiBase()}/chat/users/conversation`;
+            if (startDate) url += `?start_date=${encodeURIComponent(startDate)}`;
+            if (endDate) url += (startDate ? '&' : '?') + `end_date=${encodeURIComponent(endDate)}`;
+            
+            try {
+                const response = await fetch(url, {
+                    headers: {
+                        'Authorization': `Bearer ${currentToken}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage('historyMsg', `获取成功，共 ${data.data.length} 条消息`, 'success');
+                    showResult('historyResult', data);
+                } else {
+                    showMessage('historyMsg', data.detail || '获取失败', 'error');
+                    showResult('historyResult', data);
+                }
+            } catch (error) {
+                showMessage('historyMsg', '网络错误: ' + error.message, 'error');
+            }
+        }
+        
+        // ========== 管理员模块 ==========
+        async function createOrgTag() {
+            if (!currentToken) {
+                showMessage('createTagMsg', '请先登录', 'error');
+                return;
+            }
+            
+            const tagId = document.getElementById('createTagId').value;
+            const name = document.getElementById('createTagName').value;
+            const description = document.getElementById('createTagDesc').value;
+            const parentTag = document.getElementById('createTagParent').value;
+            
+            if (!tagId || !name) {
+                showMessage('createTagMsg', '请填写标签ID和名称', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${getApiBase()}/admin_router/org-tags`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentToken}`
+                    },
+                    body: JSON.stringify({
+                        tagId: tagId,
+                        name: name,
+                        description: description || null,
+                        parentTag: parentTag || null
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage('createTagMsg', '组织标签创建成功', 'success');
+                    showResult('createTagResult', data);
+                } else {
+                    showMessage('createTagMsg', data.detail || '创建失败', 'error');
+                    showResult('createTagResult', data);
+                }
+            } catch (error) {
+                showMessage('createTagMsg', '网络错误: ' + error.message, 'error');
+            }
+        }
+        
+        async function assignOrgTags() {
+            if (!currentToken) {
+                showMessage('assignTagMsg', '请先登录', 'error');
+                return;
+            }
+            
+            const userId = parseInt(document.getElementById('assignUserId').value);
+            const orgTagsStr = document.getElementById('assignOrgTags').value;
+            
+            if (!userId || !orgTagsStr) {
+                showMessage('assignTagMsg', '请填写用户ID和组织标签', 'error');
+                return;
+            }
+            
+            const orgTags = orgTagsStr.split(',').map(tag => tag.trim()).filter(tag => tag);
+            
+            try {
+                const response = await fetch(`${getApiBase()}/admin_router/org-tags`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentToken}`
+                    },
+                    body: JSON.stringify({
+                        userId: userId,
+                        orgTags: orgTags
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage('assignTagMsg', '组织标签分配成功', 'success');
+                    showResult('assignTagResult', data);
+                } else {
+                    showMessage('assignTagMsg', data.detail || '分配失败', 'error');
+                    showResult('assignTagResult', data);
+                }
+            } catch (error) {
+                showMessage('assignTagMsg', '网络错误: ' + error.message, 'error');
+            }
+        }
+        
+        async function setPrimaryOrg() {
+            if (!currentToken) {
+                showMessage('primaryOrgMsg', '请先登录', 'error');
+                return;
+            }
+            
+            const userId = parseInt(document.getElementById('primaryOrgUserId').value);
+            const primaryOrg = document.getElementById('primaryOrgTag').value;
+            
+            if (!userId || !primaryOrg) {
+                showMessage('primaryOrgMsg', '请填写用户ID和主组织标签', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${getApiBase()}/admin_router/primary-org`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentToken}`
+                    },
+                    body: JSON.stringify({
+                        userId: userId,
+                        primaryOrg: primaryOrg
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage('primaryOrgMsg', '主组织设置成功', 'success');
+                    showResult('primaryOrgResult', data);
+                } else {
+                    showMessage('primaryOrgMsg', data.detail || '设置失败', 'error');
+                    showResult('primaryOrgResult', data);
+                }
+            } catch (error) {
+                showMessage('primaryOrgMsg', '网络错误: ' + error.message, 'error');
+            }
+        }
+        
+        async function getUserOrgTags() {
+            if (!currentToken) {
+                showMessage('userTagsMsg', '请先登录', 'error');
+                return;
+            }
+            
+            const userId = parseInt(document.getElementById('userTagsUserId').value);
+            
+            if (!userId) {
+                showMessage('userTagsMsg', '请填写用户ID', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${getApiBase()}/admin_router/users/org-tags?userId=${userId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${currentToken}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage('userTagsMsg', '获取成功', 'success');
+                    showResult('userTagsResult', data);
+                } else {
+                    showMessage('userTagsMsg', data.detail || '获取失败', 'error');
+                    showResult('userTagsResult', data);
+                }
+            } catch (error) {
+                showMessage('userTagsMsg', '网络错误: ' + error.message, 'error');
+            }
+        }
+        
+        async function getOrgTagTree() {
+            if (!currentToken) {
+                showMessage('tagTreeMsg', '请先登录', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${getApiBase()}/admin_router/org-tags/tree`, {
+                    headers: {
+                        'Authorization': `Bearer ${currentToken}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage('tagTreeMsg', '获取成功', 'success');
+                    showResult('tagTreeResult', data);
+                } else {
+                    showMessage('tagTreeMsg', data.detail || '获取失败', 'error');
+                    showResult('tagTreeResult', data);
+                }
+            } catch (error) {
+                showMessage('tagTreeMsg', '网络错误: ' + error.message, 'error');
+            }
+        }
+        
+        async function updateOrgTag() {
+            if (!currentToken) {
+                showMessage('updateTagMsg', '请先登录', 'error');
+                return;
+            }
+            
+            const tagId = document.getElementById('updateTagId').value;
+            const name = document.getElementById('updateTagName').value;
+            const description = document.getElementById('updateTagDesc').value;
+            const parentTag = document.getElementById('updateTagParent').value;
+            
+            if (!tagId) {
+                showMessage('updateTagMsg', '请填写标签ID', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${getApiBase()}/admin_router/org-tags/${tagId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentToken}`
+                    },
+                    body: JSON.stringify({
+                        name: name || null,
+                        description: description || null,
+                        parentTag: parentTag || null
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage('updateTagMsg', '组织标签更新成功', 'success');
+                    showResult('updateTagResult', data);
+                } else {
+                    showMessage('updateTagMsg', data.detail || '更新失败', 'error');
+                    showResult('updateTagResult', data);
+                }
+            } catch (error) {
+                showMessage('updateTagMsg', '网络错误: ' + error.message, 'error');
+            }
+        }
+        
+        async function deleteOrgTag() {
+            if (!currentToken) {
+                showMessage('deleteTagMsg', '请先登录', 'error');
+                return;
+            }
+            
+            const tagId = document.getElementById('deleteTagId').value;
+            
+            if (!tagId) {
+                showMessage('deleteTagMsg', '请填写标签ID', 'error');
+                return;
+            }
+            
+            if (!confirm('确定要删除这个组织标签吗？')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${getApiBase()}/admin_router/org-tags/${tagId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${currentToken}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage('deleteTagMsg', '组织标签删除成功', 'success');
+                    showResult('deleteTagResult', data);
+                } else {
+                    showMessage('deleteTagMsg', data.detail || '删除失败', 'error');
+                    showResult('deleteTagResult', data);
+                }
+            } catch (error) {
+                showMessage('deleteTagMsg', '网络错误: ' + error.message, 'error');
+            }
+        }
+        
         // 页面加载时自动获取验证码
         window.onload = () => {
             getCaptcha('reg');
@@ -578,4 +1595,3 @@
     </script>
 </body>
 </html>
-

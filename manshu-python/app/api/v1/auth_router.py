@@ -226,34 +226,56 @@ async def register(
     if existing_username:
         raise HTTPException(status_code=400, detail="用户名已存在")
 
-    # 创建用户（id 为自增，不手动设置）
-    hashed_pwd = hash_password(request_data.password)
-    new_user = User(
-        username=request_data.username,
-        email=request_data.email,
-        password=hashed_pwd,
-        role=UserRole.USER,
-    )
-    db.add(new_user)
-    await db.commit()
-    await db.refresh(new_user)
+    # 创建用户和组织标签（原子操作）
+    try:
+        hashed_pwd = hash_password(request_data.password)
+        new_user = User(
+            username=request_data.username,
+            email=request_data.email,
+            password=hashed_pwd,
+            role=UserRole.USER,
+        )
+        db.add(new_user)
+        await db.flush()  # 刷新以获取用户ID，但不提交
+        
+        # 创建用户私人组织标签（PRIVATE_username）
+        private_tag_id = f"PRIVATE_{request_data.username}"
+        private_tag = OrganizationTag(
+            tag_id=private_tag_id,
+            name=f"我的组织-{request_data.username}",
+            description=f"用户 {request_data.username} 的私人组织",
+            parent_tag=None,  # 顶级标签，无父标签
+            created_by=new_user.id,
+        )
+        db.add(private_tag)
 
-    # 创建用户私人组织标签（PRIVATE_username）
-    private_tag_id = f"PRIVATE_{request_data.username}"
-    private_tag = OrganizationTag(
-        tag_id=private_tag_id,
-        name=f"我的组织-{request_data.username}",
-        description=f"用户 {request_data.username} 的私人组织",
-        parent_tag=None,  # 顶级标签，无父标签
-        created_by=new_user.id,
-    )
-    db.add(private_tag)
-
-    # 设置用户的组织标签和主组织
-    new_user.org_tags = private_tag_id
-    new_user.primary_org = private_tag_id
-    await db.commit()
-    await db.refresh(new_user)
+        # 设置用户的组织标签和主组织
+        new_user.org_tags = private_tag_id
+        new_user.primary_org = private_tag_id
+        
+        # 一次性提交所有更改（原子操作）
+        await db.commit()
+        await db.refresh(new_user)
+    except Exception as e:
+        await db.rollback()
+        error_type = type(e).__name__
+        error_detail = str(e)
+        logger.error(f"用户注册失败: {error_type}: {error_detail}", exc_info=True)
+        
+        # 根据错误类型提供更具体的错误消息
+        if "IntegrityError" in error_type or "duplicate" in error_detail.lower():
+            detail_msg = "用户名或邮箱已存在，请使用其他信息注册。"
+        elif "database" in error_detail.lower() or "Database" in error_type:
+            detail_msg = "数据库操作失败，请稍后重试。如果问题持续，请联系管理员。"
+        elif "connection" in error_detail.lower() or "Connection" in error_type:
+            detail_msg = "无法连接到数据库，请稍后重试。"
+        else:
+            detail_msg = f"注册失败: {error_detail[:100]}（错误类型: {error_type}）"
+        
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=detail_msg
+        )
 
     # 生成访问 token（使用增强版 JWT 工具，自动写入角色/组织等 claims 并缓存）
     access_token = await jwt_utils.generate_token(db, new_user.username)
