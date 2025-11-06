@@ -1,7 +1,7 @@
 """
 组织标签模型
 """
-from sqlalchemy import Column, String, Text, BigInteger, DateTime, ForeignKey
+from sqlalchemy import Column, String, Text, BigInteger, DateTime, ForeignKey, Index
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.models.base import Base
@@ -26,4 +26,9 @@ class OrganizationTag(Base):
     
     def __repr__(self):
         return f"<OrganizationTag(tag_id={self.tag_id}, name={self.name})>"
+
+    # 可选索引（如常用按 name 查找，可添加）
+    __table_args__ = (
+        Index('idx_org_tag_name', 'name'),
+    )
 

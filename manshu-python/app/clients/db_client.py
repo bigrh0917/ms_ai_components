@@ -1,6 +1,7 @@
 """
 MySQL 数据库客户端
 """
+import asyncio
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from typing import AsyncGenerator
@@ -36,7 +37,26 @@ class DatabaseClient:
     async def close(self):
         """关闭数据库连接"""
         if self.engine:
-            await self.engine.dispose()
+            try:
+                # 关闭数据库引擎和连接池
+                # 注意：在事件循环关闭时可能会抛出异常，这是正常的
+                # 使用 dispose(close=True) 确保所有连接都被关闭
+                await self.engine.dispose(close=True)
+            except (asyncio.CancelledError, RuntimeError) as e:
+                # 忽略取消错误和事件循环已关闭的错误
+                # 这些错误在测试结束时是正常的，不影响功能
+                # RuntimeError 可能包含 "Event loop is closed"
+                pass
+            except AttributeError:
+                # 忽略属性错误（引擎可能已经被部分清理）
+                pass
+            except Exception:
+                # 忽略其他关闭时的异常
+                pass
+            finally:
+                # 清理引用，确保即使出现异常也能清理
+                self.engine = None
+                self.SessionLocal = None
     
     async def get_session(self) -> AsyncGenerator[AsyncSession, None]:
         """获取数据库会话"""

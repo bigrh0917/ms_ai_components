@@ -95,6 +95,62 @@ class RedisClient:
         except Exception as e:
             print(f"Redis ttl error: {e}")
             return -1
+
+    # ========================= BitSet 扩展（分片上传跟踪） =========================
+    async def set_bit(self, key: str, offset: int, value: int) -> int:
+        """
+        设置位图中某一位的值（0/1）。
+        等价于 Redis: SETBIT key offset value
+        返回旧值（0/1）。
+        """
+        try:
+            # aioredis 返回 int（旧值）
+            return int(await self.redis.setbit(key, offset, value))
+        except Exception as e:
+            print(f"Redis setbit error: {e}")
+            return 0
+
+    async def get_bit(self, key: str, offset: int) -> int:
+        """
+        获取位图中某一位的值（0/1）。等价于 Redis: GETBIT key offset
+        """
+        try:
+            return int(await self.redis.getbit(key, offset))
+        except Exception as e:
+            print(f"Redis getbit error: {e}")
+            return 0
+
+    async def bitcount(self, key: str) -> int:
+        """
+        统计位图中值为 1 的位个数。等价于 Redis: BITCOUNT key
+        """
+        try:
+            return int(await self.redis.bitcount(key))
+        except Exception as e:
+            print(f"Redis bitcount error: {e}")
+            return 0
+
+    async def get_bitmap_progress(self, key: str, total_bits: int) -> float:
+        """
+        计算位图进度（已上传分片数 / 总分片数）。
+        返回值范围 0.0~1.0；当 total_bits<=0 或 key 不存在时返回 0.0。
+        """
+        try:
+            if total_bits <= 0:
+                return 0.0
+            if not await self.exists(key):
+                return 0.0
+            done = await self.bitcount(key)
+            return min(1.0, max(0.0, done / float(total_bits)))
+        except Exception as e:
+            print(f"Redis bitmap progress error: {e}")
+            return 0.0
+
+    async def clear_bitmap(self, key: str) -> bool:
+        """
+        清理位图键（上传完成或取消时调用）。
+        """
+        return await self.delete(key)
     
     async def health_check(self) -> bool:
         """健康检查"""

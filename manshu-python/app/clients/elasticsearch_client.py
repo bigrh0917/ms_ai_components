@@ -66,6 +66,12 @@ class ElasticsearchClient:
             bool: 是否创建成功
         """
         try:
+            # 先检查索引是否已存在
+            exists = await self.index_exists(index)
+            if exists:
+                logger.info(f"索引 {index} 已存在，跳过创建")
+                return True
+            
             body = {}
             if mappings:
                 body["mappings"] = mappings
@@ -76,7 +82,27 @@ class ElasticsearchClient:
             logger.info(f"索引创建成功: {index}")
             return True
         except Exception as e:
-            logger.error(f"索引创建失败: {e}")
+            # 立即输出错误信息到 stderr，确保即使被捕获也能看到
+            import sys
+            print(f"\n[ERROR] 索引创建异常: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
+            print(f"[ERROR] 错误详情: {repr(e)}", file=sys.stderr, flush=True)
+            # 检查是否是索引已存在的错误
+            error_str = str(e).lower()
+            if "resource_already_exists_exception" in error_str or "already_exists" in error_str:
+                logger.info(f"索引 {index} 已存在（创建时发现），跳过")
+                return True
+            
+            # 输出详细的错误信息
+            logger.error(f"索引创建失败: {type(e).__name__}: {e}")
+            logger.error(f"错误详情: {repr(e)}")
+            
+            # 如果是 IK 插件相关的错误，给出明确提示
+            if "ik" in error_str or "analyzer" in error_str or "not found" in error_str:
+                logger.error("⚠️ 可能是 IK 分词器插件未安装！")
+                logger.error("   解决方案：")
+                logger.error("   1. 安装 IK 插件: ./elasticsearch-plugin install https://github.com/medcl/elasticsearch-analysis-ik/releases/download/v8.11.0/elasticsearch-analysis-ik-8.11.0.zip")
+                logger.error("   2. 或修改索引配置使用标准分词器（临时方案）")
+            
             return False
     
     async def delete_index(self, index: str) -> bool:
@@ -223,17 +249,35 @@ class ElasticsearchClient:
             sort: 排序条件
             
         Returns:
-            Optional[Dict]: 搜索结果，失败返回 None
+            搜索结果字典，失败返回 None
         """
         try:
-            body = {"query": query, "size": size, "from": from_}
-            if sort:
-                body["sort"] = sort
+            if not self.client:
+                logger.error("Elasticsearch 客户端未初始化")
+                return None
             
-            result = await self.client.search(index=index, body=body)
+            # 检查索引是否存在
+            exists = await self.index_exists(index)
+            if not exists:
+                logger.warning(f"索引 {index} 不存在，无法搜索")
+                return None
+            
+            search_params = {
+                "index": index,
+                "body": {"query": query},
+                "size": size,
+                "from": from_
+            }
+            
+            if sort:
+                search_params["body"]["sort"] = sort
+            
+            result = await self.client.search(**search_params)
             return result
+            
         except Exception as e:
-            logger.error(f"搜索失败: {e}")
+            logger.error(f"搜索失败: {type(e).__name__}: {e}")
+            logger.error(f"搜索错误详情: {repr(e)}", exc_info=True)
             return None
     
     async def bulk_index(self, index: str, documents: List[Dict]) -> bool:

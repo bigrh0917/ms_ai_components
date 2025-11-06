@@ -1,9 +1,12 @@
 """
 应用配置
 """
+import logging
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List
 from pathlib import Path
+
+
 
 # 项目根目录（rag 目录）
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -101,6 +104,39 @@ class Settings(BaseSettings):
     # Kafka 配置
     KAFKA_BOOTSTRAP_SERVERS: str
     KAFKA_DEFAULT_TOPIC: str = "default"
+    
+    # OpenAI Embedding 配置
+    OPENAI_API_KEY: str
+    OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
+    OPENAI_EMBEDDING_DIMENSIONS: int = 1536  # text-embedding-3-small 默认维度
+    
+    # OpenAI Chat 配置
+    OPENAI_CHAT_MODEL: str = "gpt-3.5-turbo"  # 聊天模型，可选: gpt-3.5-turbo, gpt-4, gpt-4-turbo-preview
+    OPENAI_CHAT_TEMPERATURE: float = 0.7  # 温度参数，控制随机性 (0-2)
+    OPENAI_CHAT_MAX_TOKENS: int = 2000  # 最大token数，None表示使用模型默认值
+    
+    # 聊天配置
+    CONVERSATION_MAX_MESSAGES: int = 20  # 会话最大消息数
+    CONVERSATION_TTL_DAYS: int = 7  # 会话过期时间（天）
+    CHAT_STOP_TOKEN_TTL: int = 300  # 停止令牌有效期（秒）
+    
+    # 日志配置
+    DEBUG_LOG_LEVEL: str = "DEBUG"  # 开发模式日志级别: DEBUG, INFO, WARNING, ERROR, CRITICAL
+    PRODUCTION_LOG_LEVEL: str = "INFO"  # 生产模式日志级别: DEBUG, INFO, WARNING, ERROR, CRITICAL
+    
+    @staticmethod
+    def get_log_level() -> int:
+        """根据DEBUG模式返回对应的日志级别"""
+
+        level_str = settings.DEBUG_LOG_LEVEL if settings.DEBUG else settings.PRODUCTION_LOG_LEVEL
+        level_map = {
+            "DEBUG": logging.DEBUG,
+            "INFO": logging.INFO,
+            "WARNING": logging.WARNING,
+            "ERROR": logging.ERROR,
+            "CRITICAL": logging.CRITICAL
+        }
+        return level_map.get(level_str.upper(), logging.INFO)
     
     model_config = SettingsConfigDict(
         env_file=str(BASE_DIR / ".env"),  # 使用绝对路径

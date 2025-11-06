@@ -4,8 +4,8 @@
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from app.api.deps import get_db
+from sqlalchemy import select, or_, func
+from app.api.deps import get_db, get_current_user
 from app.utils.logger import get_logger, mask_sensitive
 from app.schemas.auth import (
     CaptchaResponse,
@@ -15,8 +15,13 @@ from app.schemas.auth import (
     UserRegisterResponse,
     UserLoginRequest,
     UserLoginResponse,
+    UserInfoResponse,
+    UserInfoData,
+    UserListResponse,
+    UserListItem,
 )
-from app.models.user import User
+from app.models.user import User, UserRole
+from typing import List, Optional
 from app.clients.redis_client import redis_client
 from app.core.config import settings
 from app.utils.captcha import (
@@ -28,17 +33,16 @@ from app.utils.email_code import generate_email_code
 from app.utils.security import (
     hash_password,
     verify_password,
-    create_access_token,
-    create_temp_token,
-    verify_temp_token,
     generate_uuid,
 )
+from app.utils import jwt_utils
 from app.utils.rate_limit import (
     check_captcha_rate_limit,
     check_email_code_rate_limit,
     check_register_rate_limit,
 )
 from app.services.email_service import email_service
+from app.models.organization import OrganizationTag
 
 # 创建日志记录器
 logger = get_logger(__name__)
@@ -136,8 +140,8 @@ async def send_email_code(
         # 速率限制
         await check_email_code_rate_limit(request_data.email)
 
-        # 生成临时 token
-        temp_token = create_temp_token(request_data.email)
+        # 生成临时 token（统一由 jwt_utils 提供）
+        temp_token = jwt_utils.create_temp_token(request_data.email)
 
         # 生成邮箱验证码
         email_code = generate_email_code()
@@ -182,7 +186,7 @@ async def register(
     await check_register_rate_limit(request)
 
     # 验证临时 token
-    email_from_token = verify_temp_token(request_data.temp_token)
+    email_from_token = jwt_utils.verify_temp_token(request_data.temp_token)
     if not email_from_token or email_from_token != request_data.email:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="临时令牌无效或已过期"
@@ -214,29 +218,52 @@ async def register(
             status_code=status.HTTP_400_BAD_REQUEST, detail="该邮箱已被注册"
         )
 
-    # 创建用户
-    user_id = generate_uuid()
-    hashed_pwd = hash_password(request_data.password)
+    # 额外校验：用户名是否已存在
+    result = await db.execute(
+        select(User).where(User.username == request_data.username)
+    )
+    existing_username = result.scalar_one_or_none()
+    if existing_username:
+        raise HTTPException(status_code=400, detail="用户名已存在")
 
+    # 创建用户（id 为自增，不手动设置）
+    hashed_pwd = hash_password(request_data.password)
     new_user = User(
-        id=user_id,
+        username=request_data.username,
         email=request_data.email,
-        hashed_password=hashed_pwd,
-        is_active=True,
-        is_verified=True,  # 通过邮箱验证后直接设为已验证
+        password=hashed_pwd,
+        role=UserRole.USER,
     )
     db.add(new_user)
     await db.commit()
     await db.refresh(new_user)
 
-    # 生成访问 token（自动登录）
-    access_token = create_access_token(data={"sub": user_id})
+    # 创建用户私人组织标签（PRIVATE_username）
+    private_tag_id = f"PRIVATE_{request_data.username}"
+    private_tag = OrganizationTag(
+        tag_id=private_tag_id,
+        name=f"我的组织-{request_data.username}",
+        description=f"用户 {request_data.username} 的私人组织",
+        parent_tag=None,  # 顶级标签，无父标签
+        created_by=new_user.id,
+    )
+    db.add(private_tag)
+
+    # 设置用户的组织标签和主组织
+    new_user.org_tags = private_tag_id
+    new_user.primary_org = private_tag_id
+    await db.commit()
+    await db.refresh(new_user)
+
+    # 生成访问 token（使用增强版 JWT 工具，自动写入角色/组织等 claims 并缓存）
+    access_token = await jwt_utils.generate_token(db, new_user.username)
 
     # 清理相关临时数据
     # temp_token 会自动过期，这里可选择性删除
 
     return UserRegisterResponse(
         id=new_user.id,
+        username=new_user.username,
         email=new_user.email,
         access_token=access_token,
         token_type="bearer",
@@ -249,36 +276,167 @@ async def login(request_data: UserLoginRequest, db: AsyncSession = Depends(get_d
     """
     用户登录
 
-    - 验证邮箱和密码
-    - 返回访问token
+    - 接收用户登录请求，获取用户名和密码
+    - 查询用户记录并验证密码
+    - 加载用户组织标签信息（通过 generate_token 自动加载）
+    - 生成包含用户信息和组织标签的 JWT Token
+    - 返回登录成功响应和 Token
     """
-    # 查询用户
-    result = await db.execute(select(User).where(User.email == request_data.email))
+    # 查询用户（按用户名）
+    result = await db.execute(select(User).where(User.username == request_data.username))
     user = result.scalar_one_or_none()
 
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="邮箱或密码错误"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="用户名或密码错误"
         )
 
     # 验证密码
-    if not verify_password(request_data.password, user.hashed_password):
+    if not verify_password(request_data.password, user.password):
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="邮箱或密码错误"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="用户名或密码错误"
         )
 
-    # 检查用户状态
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="用户已被禁用"
-        )
-
-    # 生成访问 token
-    access_token = create_access_token(data={"sub": user.id})
+    # 生成访问 token（增强版）
+    access_token = await jwt_utils.generate_token(db, user.username)
 
     return UserLoginResponse(
         access_token=access_token,
         token_type="bearer",
         user_id=user.id,
+        username=user.username,
         email=user.email,
+    )
+
+
+@router.get("/me", response_model=UserInfoResponse)
+async def get_current_user_info(
+    current_user: User = Depends(get_current_user)
+):
+    """
+    获取当前登录用户信息
+    
+    - 从 JWT token 中提取用户信息
+    - 返回用户详细信息（包含组织标签）
+    """
+    # 解析组织标签（如果是逗号分隔的字符串，转换为列表）
+    org_tags_list: List[str] = []
+    if current_user.org_tags:
+        org_tags_list = [tag.strip() for tag in current_user.org_tags.split(",") if tag.strip()]
+    
+    # 获取角色字符串
+    role_str = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    
+    return UserInfoResponse(
+        code=200,
+        message="Success",
+        data=UserInfoData(
+            id=current_user.id,
+            username=current_user.username,
+            role=role_str,
+            orgTags=org_tags_list,
+            primaryOrg=current_user.primary_org,
+        )
+    )
+
+
+@router.get("/users", response_model=UserListResponse)
+async def get_user_list(
+    page: int = 1,
+    size: int = 20,
+    keyword: Optional[str] = None,
+    orgTag: Optional[str] = None,
+    status: Optional[int] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    获取用户列表
+    
+    - 支持分页查询
+    - 支持关键词搜索（用户名或邮箱）
+    - 支持按组织标签筛选
+    - 需要 JWT 认证
+    """
+    # 构建查询
+    query = select(User)
+    
+    # 关键词搜索（用户名或邮箱）
+    if keyword:
+        query = query.where(
+            or_(
+                User.username.like(f"%{keyword}%"),
+                User.email.like(f"%{keyword}%")
+            )
+        )
+    
+    # 组织标签筛选
+    if orgTag:
+        query = query.where(
+            or_(
+                User.org_tags.like(f"%{orgTag}%"),
+                User.primary_org == orgTag
+            )
+        )
+    
+    # 获取总数（使用相同的筛选条件）
+    count_query = select(func.count(User.id))
+    
+    # 应用相同的筛选条件
+    if keyword:
+        count_query = count_query.where(
+            or_(
+                User.username.like(f"%{keyword}%"),
+                User.email.like(f"%{keyword}%")
+            )
+        )
+    if orgTag:
+        count_query = count_query.where(
+            or_(
+                User.org_tags.like(f"%{orgTag}%"),
+                User.primary_org == orgTag
+            )
+        )
+    
+    total_result = await db.execute(count_query)
+    total_elements = total_result.scalar_one()
+    
+    # 分页
+    offset = (page - 1) * size
+    query = query.order_by(User.created_at.desc()).offset(offset).limit(size)
+    
+    # 执行查询
+    result = await db.execute(query)
+    users = result.scalars().all()
+    
+    # 构建响应
+    user_items = []
+    for user in users:
+        # 解析组织标签
+        org_tags_list: List[str] = []
+        if user.org_tags:
+            org_tags_list = [tag.strip() for tag in user.org_tags.split(",") if tag.strip()]
+        
+        user_items.append(UserListItem(
+            userId=user.id,
+            username=user.username,
+            email=user.email,
+            orgTags=org_tags_list,
+            primaryOrg=user.primary_org,
+            createTime=user.created_at
+        ))
+    
+    # 计算总页数
+    total_pages = (total_elements + size - 1) // size if total_elements > 0 else 0
+    
+    return UserListResponse(
+        code=200,
+        message="Get users successful",
+        data={
+            "content": user_items,
+            "totalElements": total_elements,
+            "totalPages": total_pages,
+            "size": size,
+            "number": page - 1  # 从 0 开始
+        }
     )

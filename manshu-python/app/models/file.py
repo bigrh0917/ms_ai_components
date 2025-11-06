@@ -1,7 +1,7 @@
 """
 文件相关模型
 """
-from sqlalchemy import Column, String, BigInteger, Integer, Boolean, DateTime, ForeignKey, SmallInteger, Text
+from sqlalchemy import Column, String, BigInteger, Integer, Boolean, DateTime, ForeignKey, SmallInteger, Text, Index, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.models.base import Base
@@ -32,6 +32,16 @@ class FileUpload(Base):
     def __repr__(self):
         return f"<FileUpload(id={self.id}, file_name={self.file_name}, status={self.status})>"
 
+    # DDL 对齐：
+    __table_args__ = (
+        # UNIQUE KEY uk_md5_user (file_md5, user_id)
+        UniqueConstraint('file_md5', 'user_id', name='uk_md5_user'),
+        # INDEX idx_user (user_id)
+        Index('idx_user', 'user_id'),
+        # INDEX idx_org_tag (org_tag)
+        Index('idx_org_tag', 'org_tag'),
+    )
+
 
 class ChunkInfo(Base):
     """文件分片信息表"""
@@ -50,6 +60,11 @@ class ChunkInfo(Base):
     def __repr__(self):
         return f"<ChunkInfo(id={self.id}, file_md5={self.file_md5}, chunk_index={self.chunk_index})>"
 
+    # DDL 对齐：INDEX idx_file_chunk (file_md5, chunk_index)
+    __table_args__ = (
+        Index('idx_file_chunk', 'file_md5', 'chunk_index'),
+    )
+
 
 class DocumentVector(Base):
     """文档向量化结果表"""
@@ -67,4 +82,9 @@ class DocumentVector(Base):
     
     def __repr__(self):
         return f"<DocumentVector(vector_id={self.vector_id}, file_md5={self.file_md5}, chunk_id={self.chunk_id})>"
+
+    # DDL 对齐：INDEX idx_file_chunk (file_md5, chunk_id)
+    __table_args__ = (
+        Index('idx_file_chunk_vectors', 'file_md5', 'chunk_id'),
+    )
 

@@ -26,6 +26,12 @@ elasticsearch==8.10.0
 # Kafka
 aiokafka==0.10.0
 
+# OpenAI & LangChain
+openai==1.54.0
+langchain==0.3.7
+langchain-openai==0.2.8
+langchain-core==0.3.15
+
 # 认证和安全
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4

@@ -5,11 +5,16 @@ from fastapi import APIRouter
 from app.api.v1 import auth_router
 from app.api.v1 import document_router
 from app.api.v1 import file_router
+from app.api.v1 import admin_router
+from app.api.v1 import chat_router
 
 router = APIRouter()
 
 # 注册子路由
 router.include_router(auth_router.router, prefix="/auth", tags=["认证"])
-router.include_router(document_router.router, prefix="/document", tags=["文档"])
-router.include_router(file_router.router, prefix="/file", tags=["文件"])
+router.include_router(document_router.router, prefix="/search", tags=["文档检索"])  # 检索接口: /api/v1/search/hybrid
+router.include_router(file_router.upload_router, prefix="/upload", tags=["文件上传"])
+router.include_router(file_router.documents_router, prefix="/documents", tags=["文档管理"])
+router.include_router(admin_router.router, prefix="/admin_router", tags=["管理员"])
+router.include_router(chat_router.router, tags=["聊天助手"])  # 聊天接口: /api/v1/chat/{token} (WebSocket)
 

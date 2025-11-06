@@ -138,6 +138,16 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
             "status_code": exc.status_code,
         }
     )
+    # 401 错误返回统一格式（code 为数字）
+    if exc.status_code == 401:
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={
+                "code": exc.status_code,
+                "message": exc.detail if exc.detail else "Unauthorized"
+            }
+        )
+    
     return JSONResponse(
         status_code=exc.status_code,
         content={

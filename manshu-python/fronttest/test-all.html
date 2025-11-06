@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>用户模块功能测试</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #333;
+        }
+        
+        .api-config {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .api-config label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        .api-config input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .sections {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+        }
+        
+        .section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .section h2 {
+            margin-bottom: 15px;
+            color: #555;
+            font-size: 18px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 8px;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .form-group input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .captcha-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .captcha-group input {
+            flex: 1;
+        }
+        
+        .captcha-img {
+            width: 100px;
+            height: 35px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            color: #999;
+        }
+        
+        .captcha-img img {
+            width: 100%;
+            height: 100%;
+            border-radius: 3px;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+        }
+        
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+        
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #5568d3;
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+        
+        .btn-secondary:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .message {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            font-size: 13px;
+            display: none;
+        }
+        
+        .message.show {
+            display: block;
+        }
+        
+        .message.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .message.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .result {
+            margin-top: 15px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        
+        .token-display {
+            background: #fff3cd;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            font-size: 12px;
+            word-break: break-all;
+        }
+        
+        .token-display strong {
+            display: block;
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>用户模块功能测试</h1>
+        
+        <div class="api-config">
+            <label>API 基础地址：</label>
+            <input type="text" id="apiBase" value="http://localhost:8000/api/v1" placeholder="修改为你的后端地址">
+        </div>
+        
+        <div class="sections">
+            <!-- 注册区域 -->
+            <div class="section">
+                <h2>1. 用户注册</h2>
+                <div id="registerMsg" class="message"></div>
+                <div class="form-group">
+                    <label>用户名：</label>
+                    <input type="text" id="regUsername" placeholder="至少3个字符">
+                </div>
+                <div class="form-group">
+                    <label>邮箱：</label>
+                    <input type="email" id="regEmail" placeholder="user@example.com">
+                </div>
+                <div class="form-group">
+                    <label>密码：</label>
+                    <input type="password" id="regPassword" placeholder="至少6个字符">
+                </div>
+                <div class="form-group">
+                    <label>图形验证码：</label>
+                    <div class="captcha-group">
+                        <input type="text" id="regCaptchaCode" placeholder="输入验证码">
+                        <div class="captcha-img" id="regCaptchaImg" onclick="getCaptcha('reg')">点击获取</div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>邮箱验证码：</label>
+                    <div class="button-group">
+                        <input type="text" id="regEmailCode" placeholder="6位数字" style="flex: 1;">
+                        <button class="btn-secondary" onclick="sendEmailCode('reg')" id="regSendBtn">发送</button>
+                    </div>
+                </div>
+                <button class="btn-primary" onclick="register()" style="width: 100%;">注册</button>
+                <div id="registerResult" class="result" style="display: none;"></div>
+            </div>
+            
+            <!-- 登录区域 -->
+            <div class="section">
+                <h2>2. 用户登录</h2>
+                <div id="loginMsg" class="message"></div>
+                <div class="form-group">
+                    <label>用户名：</label>
+                    <input type="text" id="loginUsername" placeholder="输入用户名">
+                </div>
+                <div class="form-group">
+                    <label>密码：</label>
+                    <input type="password" id="loginPassword" placeholder="输入密码">
+                </div>
+                <button class="btn-primary" onclick="login()" style="width: 100%;">登录</button>
+                <div id="tokenDisplay" class="token-display" style="display: none;">
+                    <strong>当前 Token：</strong>
+                    <span id="tokenValue"></span>
+                </div>
+                <div id="loginResult" class="result" style="display: none;"></div>
+            </div>
+            
+            <!-- 获取用户信息 -->
+            <div class="section">
+                <h2>3. 获取当前用户信息</h2>
+                <div id="meMsg" class="message"></div>
+                <button class="btn-primary" onclick="getCurrentUser()" style="width: 100%;">获取信息</button>
+                <div id="meResult" class="result" style="display: none;"></div>
+            </div>
+            
+            <!-- 用户列表 -->
+            <div class="section">
+                <h2>4. 获取用户列表</h2>
+                <div id="listMsg" class="message"></div>
+                <div class="form-group">
+                    <label>页码：</label>
+                    <input type="number" id="listPage" value="1" min="1">
+                </div>
+                <div class="form-group">
+                    <label>每页数量：</label>
+                    <input type="number" id="listSize" value="20" min="1">
+                </div>
+                <div class="form-group">
+                    <label>关键词搜索（可选）：</label>
+                    <input type="text" id="listKeyword" placeholder="用户名或邮箱">
+                </div>
+                <div class="form-group">
+                    <label>组织标签筛选（可选）：</label>
+                    <input type="text" id="listOrgTag" placeholder="组织标签ID">
+                </div>
+                <button class="btn-primary" onclick="getUserList()" style="width: 100%;">查询</button>
+                <div id="listResult" class="result" style="display: none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentToken = '';
+        let regCaptchaId = '';
+        let regTempToken = '';
+        let regCountdown = 0;
+        
+        function getApiBase() {
+            return document.getElementById('apiBase').value;
+        }
+        
+        function showMessage(id, text, type = 'success') {
+            const msg = document.getElementById(id);
+            msg.textContent = text;
+            msg.className = `message ${type} show`;
+            setTimeout(() => {
+                msg.className = 'message';
+            }, 5000);
+        }
+        
+        function showResult(id, data) {
+            const result = document.getElementById(id);
+            result.textContent = JSON.stringify(data, null, 2);
+            result.style.display = 'block';
+        }
+        
+        // 获取图形验证码
+        async function getCaptcha(type) {
+            try {
+                const response = await fetch(`${getApiBase()}/auth/captcha`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    regCaptchaId = data.captcha_id;
+                    const imgEl = document.getElementById('regCaptchaImg');
+                    imgEl.innerHTML = `<img src="data:image/png;base64,${data.captcha_image}" alt="验证码">`;
+                    showMessage('registerMsg', '验证码已刷新', 'success');
+                } else {
+                    showMessage('registerMsg', data.detail || '获取验证码失败', 'error');
+                }
+            } catch (error) {
+                showMessage('registerMsg', '网络错误: ' + error.message, 'error');
+            }
+        }
+        
+        // 发送邮箱验证码
+        async function sendEmailCode(type) {
+            const email = document.getElementById('regEmail').value;
+            const captchaCode = document.getElementById('regCaptchaCode').value;
+            
+            if (!email) {
+                showMessage('registerMsg', '请先输入邮箱', 'error');
+                return;
+            }
+            
+            if (!regCaptchaId || !captchaCode) {
+                showMessage('registerMsg', '请先获取并输入图形验证码', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${getApiBase()}/auth/send_code`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email: email,
+                        captcha_id: regCaptchaId,
+                        captcha_code: captchaCode
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    regTempToken = data.temp_token;
+                    showMessage('registerMsg', '验证码已发送到邮箱', 'success');
+                    startCountdown();
+                } else {
+                    showMessage('registerMsg', data.detail || '发送失败', 'error');
+                    getCaptcha('reg');
+                }
+            } catch (error) {
+                showMessage('registerMsg', '网络错误: ' + error.message, 'error');
+            }
+        }
+        
+        // 倒计时
+        function startCountdown() {
+            regCountdown = 60;
+            const btn = document.getElementById('regSendBtn');
+            btn.disabled = true;
+            
+            const timer = setInterval(() => {
+                regCountdown--;
+                btn.textContent = `${regCountdown}秒`;
+                
+                if (regCountdown <= 0) {
+                    clearInterval(timer);
+                    btn.disabled = false;
+                    btn.textContent = '发送';
+                }
+            }, 1000);
+        }
+        
+        // 注册
+        async function register() {
+            const username = document.getElementById('regUsername').value;
+            const email = document.getElementById('regEmail').value;
+            const password = document.getElementById('regPassword').value;
+            const emailCode = document.getElementById('regEmailCode').value;
+            
+            if (!username || !email || !password || !emailCode) {
+                showMessage('registerMsg', '请填写完整信息', 'error');
+                return;
+            }
+            
+            if (!regTempToken) {
+                showMessage('registerMsg', '请先获取邮箱验证码', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${getApiBase()}/auth/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: username,
+                        email: email,
+                        password: password,
+                        email_code: emailCode,
+                        temp_token: regTempToken
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage('registerMsg', '注册成功！用户ID: ' + data.id, 'success');
+                    showResult('registerResult', data);
+                    currentToken = data.access_token;
+                    updateTokenDisplay();
+                } else {
+                    showMessage('registerMsg', data.detail || '注册失败', 'error');
+                    showResult('registerResult', data);
+                }
+            } catch (error) {
+                showMessage('registerMsg', '网络错误: ' + error.message, 'error');
+            }
+        }
+        
+        // 登录
+        async function login() {
+            const username = document.getElementById('loginUsername').value;
+            const password = document.getElementById('loginPassword').value;
+            
+            if (!username || !password) {
+                showMessage('loginMsg', '请填写用户名和密码', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${getApiBase()}/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: username,
+                        password: password
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    currentToken = data.access_token;
+                    updateTokenDisplay();
+                    showMessage('loginMsg', '登录成功！', 'success');
+                    showResult('loginResult', data);
+                } else {
+                    showMessage('loginMsg', data.detail || '登录失败', 'error');
+                    showResult('loginResult', data);
+                }
+            } catch (error) {
+                showMessage('loginMsg', '网络错误: ' + error.message, 'error');
+            }
+        }
+        
+        // 更新 Token 显示
+        function updateTokenDisplay() {
+            if (currentToken) {
+                document.getElementById('tokenDisplay').style.display = 'block';
+                document.getElementById('tokenValue').textContent = currentToken.substring(0, 50) + '...';
+            }
+        }
+        
+        // 获取当前用户信息
+        async function getCurrentUser() {
+            if (!currentToken) {
+                showMessage('meMsg', '请先登录', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${getApiBase()}/auth/me`, {
+                    headers: {
+                        'Authorization': `Bearer ${currentToken}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage('meMsg', '获取成功', 'success');
+                    showResult('meResult', data);
+                } else {
+                    showMessage('meMsg', data.message || '获取失败', 'error');
+                    if (response.status === 401) {
+                        currentToken = '';
+                        updateTokenDisplay();
+                    }
+                    showResult('meResult', data);
+                }
+            } catch (error) {
+                showMessage('meMsg', '网络错误: ' + error.message, 'error');
+            }
+        }
+        
+        // 获取用户列表
+        async function getUserList() {
+            if (!currentToken) {
+                showMessage('listMsg', '请先登录', 'error');
+                return;
+            }
+            
+            const page = document.getElementById('listPage').value || 1;
+            const size = document.getElementById('listSize').value || 20;
+            const keyword = document.getElementById('listKeyword').value;
+            const orgTag = document.getElementById('listOrgTag').value;
+            
+            let url = `${getApiBase()}/auth/users?page=${page}&size=${size}`;
+            if (keyword) url += `&keyword=${encodeURIComponent(keyword)}`;
+            if (orgTag) url += `&orgTag=${encodeURIComponent(orgTag)}`;
+            
+            try {
+                const response = await fetch(url, {
+                    headers: {
+                        'Authorization': `Bearer ${currentToken}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage('listMsg', `查询成功，共 ${data.data.totalElements} 条记录`, 'success');
+                    showResult('listResult', data);
+                } else {
+                    showMessage('listMsg', data.message || '查询失败', 'error');
+                    if (response.status === 401) {
+                        currentToken = '';
+                        updateTokenDisplay();
+                    }
+                    showResult('listResult', data);
+                }
+            } catch (error) {
+                showMessage('listMsg', '网络错误: ' + error.message, 'error');
+            }
+        }
+        
+        // 页面加载时自动获取验证码
+        window.onload = () => {
+            getCaptcha('reg');
+        };
+    </script>
+</body>
+</html>
+

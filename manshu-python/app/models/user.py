@@ -20,6 +20,7 @@ class User(Base):
     
     id = Column(BigInteger, primary_key=True, autoincrement=True, comment='用户唯一标识')
     username = Column(String(255), unique=True, nullable=False, index=True, comment='用户名，唯一')
+    email = Column(String(255), unique=True, nullable=False, index=True, comment='邮箱，唯一')
     password = Column(String(255), nullable=False, comment='加密后的密码')
     role = Column(Enum(UserRole), nullable=False, default=UserRole.USER, comment='用户角色')
     org_tags = Column(String(255), nullable=True, comment='用户所属组织标签，多个用逗号分隔')
