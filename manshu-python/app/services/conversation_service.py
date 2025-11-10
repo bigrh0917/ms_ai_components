@@ -61,6 +61,8 @@ class ConversationService:
         """
         conversation_id = str(uuid.uuid4())
         await self.set_current_conversation(user_id, conversation_id)
+        # 将会话添加到用户的会话列表
+        await self.add_user_conversation(user_id, conversation_id)
         logger.info(f"为用户 {user_id} 创建新会话: {conversation_id}")
         return conversation_id
     
@@ -77,6 +79,9 @@ class ConversationService:
         conversation_id = await self.get_current_conversation(user_id)
         if not conversation_id:
             conversation_id = await self.create_conversation(user_id)
+        else:
+            # 确保当前会话在用户的会话列表中
+            await self.add_user_conversation(user_id, conversation_id)
         return conversation_id
     
     async def _get_from_redis(self, conversation_id: str) -> List[Dict[str, str]]:

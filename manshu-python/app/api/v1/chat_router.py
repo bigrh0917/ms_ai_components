@@ -15,6 +15,8 @@ from app.services.conversation_service import conversation_service
 from app.schemas.chat import (
     ConversationHistoryResponse,
     ConversationHistoryAdminResponse,
+    ConversationListResponse,
+    ConversationItem,
     MessageItem,
     MessageItemWithUser,
     WebSocketTokenResponse,
@@ -76,13 +78,13 @@ async def verify_websocket_token(websocket: WebSocket, token: str) -> Optional[U
         return None
 
 
-@router.websocket("/chat/{token}")
-async def websocket_chat(websocket: WebSocket, token: str):
+@router.websocket("/chat")
+async def websocket_chat(websocket: WebSocket):
     """
     WebSocket聊天接口
     
-    客户端连接: ws://host/api/v1/chat/{token}
-    其中token是JWT Token
+    客户端连接: ws://host/api/v1/chat?token={jwt_token}
+    其中token是JWT Token（通过查询参数传递）
     
     消息格式:
     - 普通消息: 纯文本字符串
@@ -94,11 +96,32 @@ async def websocket_chat(websocket: WebSocket, token: str):
     - 停止确认: {"type": "stop", "message": "响应已停止", ...}
     - 错误: {"error": "..."}
     """
-    await websocket.accept()
+    # 从查询参数获取token
+    query_params = dict(websocket.query_params)
+    token = query_params.get("token")
+    
+    if not token:
+        logger.warning("WebSocket连接缺少Token参数")
+        try:
+            await websocket.accept()
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="缺少Token参数")
+        except:
+            pass
+        return
+    
+    logger.info(f"收到WebSocket连接请求，Token长度: {len(token)}")
+    
+    try:
+        await websocket.accept()
+        logger.info("WebSocket连接已接受")
+    except Exception as e:
+        logger.error(f"WebSocket accept失败: {e}", exc_info=True)
+        return
     
     # 验证Token
     user = await verify_websocket_token(websocket, token)
     if not user:
+        logger.warning("WebSocket Token验证失败，连接已关闭")
         return
     
     logger.info(f"WebSocket连接建立: user_id={user.id}, username={user.username}")
@@ -230,24 +253,88 @@ async def get_websocket_token(
     )
 
 
+@router.get("/users/conversations", response_model=ConversationListResponse)
+async def get_conversation_list(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    获取用户的所有会话列表
+    """
+    try:
+        # 获取当前会话ID
+        current_conversation_id = await conversation_service.get_current_conversation(current_user.id)
+        
+        # 获取用户的所有会话ID列表
+        conversation_ids = await conversation_service.get_user_conversations(current_user.id)
+        
+        # 如果没有会话列表，但存在当前会话，则添加当前会话
+        if current_conversation_id and current_conversation_id not in conversation_ids:
+            conversation_ids.append(current_conversation_id)
+        
+        # 构建会话列表
+        conversations = []
+        for conv_id in conversation_ids:
+            # 检查是否已归档
+            is_archived = await conversation_service.is_archived(conv_id, db)
+            
+            # 获取会话历史以获取消息数量和时间
+            history = await conversation_service.get_conversation_history(conv_id, db=db)
+            message_count = len(history)
+            last_message_time = None
+            if history:
+                last_message_time = history[-1].get("timestamp")
+            
+            conversations.append(ConversationItem(
+                conversation_id=conv_id,
+                is_current=(conv_id == current_conversation_id),
+                is_archived=is_archived,
+                message_count=message_count,
+                last_message_time=last_message_time
+            ))
+        
+        # 按最后消息时间排序（最新的在前）
+        conversations.sort(key=lambda x: x.last_message_time or "", reverse=True)
+        
+        return ConversationListResponse(
+            code=200,
+            message="获取会话列表成功",
+            data=conversations
+        )
+        
+    except Exception as e:
+        logger.error(f"获取会话列表失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="获取会话列表失败"
+        )
+
+
 @router.get("/users/conversation", response_model=ConversationHistoryResponse)
 async def get_conversation_history(
+    conversation_id: Optional[str] = Query(None, description="会话ID，如果不提供则返回当前会话"),
     start_date: Optional[str] = Query(None, description="开始日期时间"),
     end_date: Optional[str] = Query(None, description="结束日期时间"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    获取当前用户的对话历史
+    获取用户的对话历史
     
-    查询参数支持多种日期格式:
+    查询参数:
+    - conversation_id: 会话ID（可选，如果不提供则返回当前会话）
+    - start_date: 开始日期时间（可选）
+    - end_date: 结束日期时间（可选）
+    
+    日期格式支持:
     - yyyy-MM-dd
     - yyyy-MM-ddTHH:mm
     - yyyy-MM-ddTHH:mm:ss
     """
     try:
-        # 获取会话ID
-        conversation_id = await conversation_service.get_current_conversation(current_user.id)
+        # 如果没有提供会话ID，则使用当前会话
+        if not conversation_id:
+            conversation_id = await conversation_service.get_current_conversation(current_user.id)
         
         if not conversation_id:
             return ConversationHistoryResponse(

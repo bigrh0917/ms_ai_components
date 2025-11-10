@@ -481,8 +481,22 @@
             </div>
             
             <div class="section">
+                <h2>12.5. 会话列表</h2>
+                <div id="conversationListMsg" class="message"></div>
+                <button class="btn-primary" onclick="getConversationList()" style="width: 100%; margin-bottom: 10px;">获取会话列表</button>
+                <div id="conversationListResult" class="result" style="display: none; max-height: 300px; overflow-y: auto;"></div>
+            </div>
+            
+            <div class="section">
                 <h2>13. 获取会话历史</h2>
                 <div id="historyMsg" class="message"></div>
+                <div class="form-group">
+                    <label>选择会话（可选，留空则获取当前会话）：</label>
+                    <select id="historyConversationId" style="width: 100%; padding: 8px; margin-bottom: 10px;">
+                        <option value="">当前会话</option>
+                    </select>
+                    <button class="btn-secondary" onclick="refreshConversationList()" style="width: 100%; margin-bottom: 10px;">刷新会话列表</button>
+                </div>
                 <div class="form-group">
                     <label>开始日期（可选）：</label>
                     <input type="datetime-local" id="historyStartDate">
@@ -1131,23 +1145,41 @@
             }
             
             try {
-                const response = await fetch(`${getApiBase()}/search/hybrid?query=${encodeURIComponent(query)}&topK=${topK}`, {
+                const searchUrl = `${getApiBase()}/search/hybrid?query=${encodeURIComponent(query)}&topK=${topK}`;
+                console.log('搜索请求URL:', searchUrl);
+                console.log('Token 前10位:', currentToken.substring(0, 10) + '...');
+                
+                const response = await fetch(searchUrl, {
                     headers: {
                         'Authorization': `Bearer ${currentToken}`
                     }
                 });
                 
+                console.log('响应状态:', response.status, response.statusText);
+                
                 const data = await response.json();
                 
                 if (response.ok) {
-                    showMessage('searchMsg', `搜索成功，找到 ${data.data.length} 个结果`, 'success');
+                    if (data.data && data.data.length > 0) {
+                        showMessage('searchMsg', `搜索成功，找到 ${data.data.length} 个结果`, 'success');
+                    } else {
+                        showMessage('searchMsg', '搜索成功，但没有找到相关结果。请确保已上传并处理了文档。', 'success');
+                    }
                     showResult('searchResult', data);
                 } else {
-                    showMessage('searchMsg', data.detail || '搜索失败', 'error');
+                    const errorMsg = data.detail || data.message || '搜索失败';
+                    if (response.status === 401) {
+                        showMessage('searchMsg', 'Token已过期，请重新登录', 'error');
+                        currentToken = '';
+                        updateTokenDisplay();
+                    } else {
+                        showMessage('searchMsg', `搜索失败 (${response.status}): ${errorMsg}`, 'error');
+                    }
                     showResult('searchResult', data);
                 }
             } catch (error) {
                 showMessage('searchMsg', '网络错误: ' + error.message, 'error');
+                console.error('搜索错误:', error);
             }
         }
         
@@ -1179,8 +1211,10 @@
                 
                 chatStopToken = tokenData.data.cmdToken;
                 
-                // 建立WebSocket连接
-                const wsUrl = `${getWsBase()}/chat/${currentToken}`;
+                // 建立WebSocket连接（使用查询参数传递Token）
+                const wsBase = getWsBase();
+                const wsUrl = `${wsBase}/chat?token=${encodeURIComponent(currentToken)}`;
+                console.log('WebSocket连接URL:', wsUrl.substring(0, 100) + '...'); // 只显示前100个字符，避免日志过长
                 chatWebSocket = new WebSocket(wsUrl);
                 
                 chatWebSocket.onopen = () => {
@@ -1214,12 +1248,17 @@
                 };
                 
                 chatWebSocket.onerror = (error) => {
-                    showMessage('chatMsg', 'WebSocket错误', 'error');
+                    showMessage('chatMsg', 'WebSocket连接错误，请检查后端服务是否运行', 'error');
                     console.error('WebSocket error:', error);
+                    console.error('WebSocket URL:', wsUrl);
                 };
                 
-                chatWebSocket.onclose = () => {
-                    showMessage('chatMsg', 'WebSocket连接已关闭', 'success');
+                chatWebSocket.onclose = (event) => {
+                    let closeMsg = 'WebSocket连接已关闭';
+                    if (event.code !== 1000) {
+                        closeMsg = `WebSocket连接关闭 (代码: ${event.code}, 原因: ${event.reason || '未知'})`;
+                    }
+                    showMessage('chatMsg', closeMsg, event.code === 1000 ? 'success' : 'error');
                     document.getElementById('chatStartBtn').disabled = false;
                     document.getElementById('chatSendBtn').disabled = true;
                     document.getElementById('chatStopBtn').disabled = true;
@@ -1280,18 +1319,78 @@
             }
         });
         
+        // ========== 会话列表模块 ==========
+        async function getConversationList() {
+            if (!currentToken) {
+                showMessage('conversationListMsg', '请先登录', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${getApiBase()}/users/conversations`, {
+                    headers: {
+                        'Authorization': `Bearer ${currentToken}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage('conversationListMsg', `获取成功，共 ${data.data.length} 个会话`, 'success');
+                    showResult('conversationListResult', data);
+                    
+                    // 更新会话选择下拉框
+                    updateConversationSelect(data.data);
+                } else {
+                    showMessage('conversationListMsg', data.detail || '获取失败', 'error');
+                    showResult('conversationListResult', data);
+                }
+            } catch (error) {
+                showMessage('conversationListMsg', '网络错误: ' + error.message, 'error');
+            }
+        }
+        
+        function updateConversationSelect(conversations) {
+            const select = document.getElementById('historyConversationId');
+            // 保留"当前会话"选项
+            select.innerHTML = '<option value="">当前会话</option>';
+            
+            conversations.forEach(conv => {
+                const option = document.createElement('option');
+                option.value = conv.conversation_id;
+                const label = `${conv.conversation_id.substring(0, 8)}... (${conv.message_count}条消息${conv.is_current ? ', 当前' : ''}${conv.is_archived ? ', 已归档' : ''})`;
+                option.textContent = label;
+                if (conv.is_current) {
+                    option.selected = true;
+                }
+                select.appendChild(option);
+            });
+        }
+        
+        async function refreshConversationList() {
+            await getConversationList();
+        }
+        
+        // ========== 会话历史模块 ==========
         async function getConversationHistory() {
             if (!currentToken) {
                 showMessage('historyMsg', '请先登录', 'error');
                 return;
             }
             
+            const conversationId = document.getElementById('historyConversationId').value;
             const startDate = document.getElementById('historyStartDate').value;
             const endDate = document.getElementById('historyEndDate').value;
             
-            let url = `${getApiBase()}/chat/users/conversation`;
-            if (startDate) url += `?start_date=${encodeURIComponent(startDate)}`;
-            if (endDate) url += (startDate ? '&' : '?') + `end_date=${encodeURIComponent(endDate)}`;
+            let url = `${getApiBase()}/users/conversation`;
+            const params = [];
+            if (conversationId) params.push(`conversation_id=${encodeURIComponent(conversationId)}`);
+            if (startDate) params.push(`start_date=${encodeURIComponent(startDate)}`);
+            if (endDate) params.push(`end_date=${encodeURIComponent(endDate)}`);
+            
+            if (params.length > 0) {
+                url += '?' + params.join('&');
+            }
             
             try {
                 const response = await fetch(url, {
@@ -1303,7 +1402,8 @@
                 const data = await response.json();
                 
                 if (response.ok) {
-                    showMessage('historyMsg', `获取成功，共 ${data.data.length} 条消息`, 'success');
+                    const conversationInfo = conversationId ? `会话 ${conversationId.substring(0, 8)}...` : '当前会话';
+                    showMessage('historyMsg', `获取成功（${conversationInfo}），共 ${data.data.length} 条消息`, 'success');
                     showResult('historyResult', data);
                 } else {
                     showMessage('historyMsg', data.detail || '获取失败', 'error');

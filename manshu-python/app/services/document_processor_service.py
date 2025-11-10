@@ -6,6 +6,7 @@ import asyncio
 from typing import Dict, List, Optional, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from tika import parser as tika_parser
 from app.clients.minio_client import minio_client
 from app.clients.elasticsearch_client import es_client
 from app.clients.db_client import db_client
@@ -28,7 +29,12 @@ class DocumentProcessorService:
     
     def parse_text_content(self, file_data: bytes, file_name: str) -> str:
         """
-        解析文件内容，提取纯文本
+        解析文件内容，提取纯文本（使用 Apache Tika）
+        
+        支持的文件格式：
+        - 文档：PDF, Word (.doc, .docx), Excel (.xls, .xlsx), PowerPoint (.ppt, .pptx)
+        - 文本：TXT, Markdown, HTML, XML, JSON, CSV
+        - 其他：RTF, ODT, ODS, ODP 等
         
         Args:
             file_data: 文件字节数据
@@ -38,36 +44,84 @@ class DocumentProcessorService:
             提取的纯文本内容
         """
         try:
-            # 尝试UTF-8解码
-            text_content = file_data.decode('utf-8')
+            # 首先尝试使用 Tika 解析文件（支持多种格式）
+            try:
+                parsed = tika_parser.from_buffer(file_data)
+                
+                if parsed and 'content' in parsed and parsed['content']:
+                    text_content = parsed['content']
+                    
+                    # 记录检测到的文件类型（如果 Tika 提供了元数据）
+                    if 'metadata' in parsed and parsed['metadata']:
+                        content_type = parsed['metadata'].get('Content-Type', 'unknown')
+                        logger.debug(f"Tika 检测到的文件类型: {content_type}")
+                    
+                    logger.info(f"使用 Tika 解析文件: {file_name}")
+                else:
+                    # Tika 未能提取内容，使用降级方案
+                    logger.warning(f"Tika 未能提取内容，使用降级方案: {file_name}")
+                    text_content = None
+                    
+            except Exception as tika_error:
+                # Tika 解析失败，使用降级方案
+                logger.warning(f"Tika 解析失败: {tika_error}，使用降级方案: {file_name}")
+                text_content = None
             
-            # 如果是Markdown文件，移除Markdown标记
-            if file_name.lower().endswith(('.md', '.markdown')):
-                # 移除标题标记
-                text_content = re.sub(r'^#+\s+', '', text_content, flags=re.MULTILINE)
-                # 移除列表标记
-                text_content = re.sub(r'^[-*+]\s+', '', text_content, flags=re.MULTILINE)
-                # 移除代码块标记
-                text_content = re.sub(r'```[^`]*```', '', text_content, flags=re.DOTALL)
-                text_content = re.sub(r'`[^`]+`', '', text_content)
-                # 移除链接标记 [text](url)
-                text_content = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text_content)
-                # 移除粗体/斜体标记
-                text_content = re.sub(r'\*\*([^\*]+)\*\*', r'\1', text_content)
-                text_content = re.sub(r'\*([^\*]+)\*', r'\1', text_content)
-                # 清理多余空行
-                text_content = re.sub(r'\n\s*\n\s*\n', '\n\n', text_content)
+            # 降级处理：如果 Tika 失败，尝试 UTF-8 解码（适用于纯文本和 Markdown）
+            if not text_content:
+                try:
+                    text_content = file_data.decode('utf-8')
+                    logger.info(f"使用 UTF-8 解码作为降级方案: {file_name}")
+                except UnicodeDecodeError:
+                    raise ValueError(f"无法解析文件内容（Tika 失败且非 UTF-8 编码）: {file_name}")
             
+            if not text_content or not text_content.strip():
+                raise ValueError(f"文件内容为空: {file_name}")
+            
+            # 清理文本内容
             text_content = text_content.strip()
+            
+            # 如果是 Markdown 文件，移除 Markdown 标记（可选，保持原有行为）
+            if file_name.lower().endswith(('.md', '.markdown')):
+                text_content = self._clean_markdown(text_content)
+            
+            # 清理多余的空行和空白字符
+            text_content = re.sub(r'\n\s*\n\s*\n+', '\n\n', text_content)
+            text_content = text_content.strip()
+            
             logger.info(f"文件解析完成: {file_name}, 文本长度: {len(text_content)} 字符")
             return text_content
             
-        except UnicodeDecodeError:
-            logger.error(f"文件解码失败（非UTF-8编码）: {file_name}")
-            raise ValueError(f"不支持的文件编码: {file_name}")
+        except ValueError:
+            # 重新抛出 ValueError
+            raise
         except Exception as e:
             logger.error(f"文件解析失败: {file_name}, 错误: {e}", exc_info=True)
-            raise
+            raise ValueError(f"文件解析失败: {str(e)}")
+    
+    def _clean_markdown(self, text: str) -> str:
+        """
+        清理 Markdown 标记，保留纯文本
+        
+        Args:
+            text: Markdown 文本
+            
+        Returns:
+            清理后的纯文本
+        """
+        # 移除标题标记
+        text = re.sub(r'^#+\s+', '', text, flags=re.MULTILINE)
+        # 移除列表标记
+        text = re.sub(r'^[-*+]\s+', '', text, flags=re.MULTILINE)
+        # 移除代码块标记
+        text = re.sub(r'```[^`]*```', '', text, flags=re.DOTALL)
+        text = re.sub(r'`[^`]+`', '', text)
+        # 移除链接标记 [text](url)
+        text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)
+        # 移除粗体/斜体标记
+        text = re.sub(r'\*\*([^\*]+)\*\*', r'\1', text)
+        text = re.sub(r'\*([^\*]+)\*', r'\1', text)
+        return text
     
     def split_text_into_chunks(self, text: str) -> List[Dict[str, Any]]:
         """

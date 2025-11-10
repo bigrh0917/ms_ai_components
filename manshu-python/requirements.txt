@@ -1,6 +1,7 @@
 # FastAPI
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
+websockets>=12.0  # WebSocket 支持
 python-multipart==0.0.6
 
 # 数据验证
@@ -48,4 +49,7 @@ httpx==0.25.2
 
 # 工具
 python-dateutil==2.8.2
+
+# 文档解析
+tika>=2.6.0  # Apache Tika Python 客户端，支持多种文件格式（PDF, Word, Excel, PowerPoint等）
 

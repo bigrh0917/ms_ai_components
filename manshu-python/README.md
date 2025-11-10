@@ -2,6 +2,8 @@
 # 安装依赖
 pip install -r requirements.txt
 
+venv\Scripts\activate
+
 # 配置环境变量
 cp env.example .env
 

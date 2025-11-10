@@ -24,7 +24,7 @@ async def document_ping():
     return {"module": "document", "status": "ok"}
 
 
-@router.get("/search/hybrid", response_model=HybridSearchResponse, summary="混合检索接口")
+@router.get("/hybrid", response_model=HybridSearchResponse, summary="混合检索接口")
 async def hybrid_search(
     query: str = Query(..., description="搜索查询字符串", min_length=1, max_length=500),
     topK: int = Query(default=10, description="返回结果数量", ge=1, le=100),
@@ -83,9 +83,18 @@ async def hybrid_search(
         
     except Exception as e:
         logger.error(f"混合检索失败: {e}", exc_info=True)
+        error_msg = str(e)
+        # 提供更友好的错误信息
+        if "Elasticsearch" in error_msg or "search" in error_msg.lower():
+            detail_msg = f"搜索服务错误: {error_msg[:200]}。请检查Elasticsearch是否正常运行，以及索引中是否有数据。"
+        elif "向量" in error_msg or "embedding" in error_msg.lower():
+            detail_msg = f"向量化服务错误: {error_msg[:200]}。请检查向量化服务是否正常运行。"
+        else:
+            detail_msg = f"检索失败: {error_msg[:200]}"
+        
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"检索失败: {str(e)}"
+            detail=detail_msg
         )
 
 
