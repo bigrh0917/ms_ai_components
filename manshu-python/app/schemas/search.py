@@ -2,7 +2,8 @@
 检索相关 Schema
 """
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
+from app.schemas.base import BaseResponse
 
 
 # ========== 混合检索请求 ==========
@@ -23,16 +24,15 @@ class SearchResultItem(BaseModel):
 
 
 # ========== 混合检索响应 ==========
-class HybridSearchResponse(BaseModel):
+class HybridSearchResponse(BaseResponse[List[SearchResultItem]]):
     """混合检索响应"""
-    code: int = 200
-    message: str = "检索成功"
-    data: List[SearchResultItem] = Field(default_factory=list, description="检索结果列表")
+    code: int = Field(200, description="状态码")
+    message: str = Field("检索成功", description="提示信息")
 
 
 # ========== 文档删除响应 ==========
-class DocumentDeleteResponse(BaseModel):
-    """文档删除响应"""
-    status: str = Field(..., description="状态：success 或 error")
-    message: str = Field(..., description="提示信息")
+class DocumentDeleteResponse(BaseResponse[Optional[Dict[str, Any]]]):
+    """文档删除响应（已废弃，请使用 DeleteFileResponse）"""
+    code: int = Field(200, description="状态码")
+    message: str = Field("文档删除成功", description="提示信息")
 

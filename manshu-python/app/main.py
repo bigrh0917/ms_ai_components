@@ -13,12 +13,14 @@ import asyncio
 from app.api import router as api_router
 from app.core.config import settings
 from app.core.exceptions import BusinessException
+from app.core.error_codes import ErrorCode, get_error_code_by_string
 from app.clients.redis_client import redis_client
 from app.clients.db_client import db_client
 from app.clients.minio_client import minio_client
 from app.clients.elasticsearch_client import es_client
 from app.clients.kafka_client import kafka_client
 from app.services.document_processor_service import document_processor_service
+from app.services.websocket_manager import websocket_manager
 from app.utils.logger import setup_logging, get_logger
 
 # 初始化日志系统
@@ -37,6 +39,7 @@ async def lifespan(app: FastAPI):
 
     kafka_consumer_task = None
     kafka_consumer = None
+    websocket_heartbeat_task = None
 
     try:
         # 连接数据库
@@ -89,6 +92,26 @@ async def lifespan(app: FastAPI):
             logger.warning(f"启动 Kafka 消费者失败（可选服务）: {e}")
             logger.warning("文档处理功能将不可用，但应用可以继续运行")
 
+        # 启动 WebSocket 心跳检测任务
+        async def heartbeat_loop():
+            """WebSocket 心跳检测循环"""
+            try:
+                while True:
+                    await asyncio.sleep(settings.WEBSOCKET_CLEANUP_INTERVAL)
+                    try:
+                        await websocket_manager.cleanup_inactive_connections()
+                    except Exception as e:
+                        logger.error(f"心跳检测异常: {e}", exc_info=True)
+            except asyncio.CancelledError:
+                logger.info("WebSocket 心跳检测任务已取消")
+            except Exception as e:
+                logger.error(f"WebSocket 心跳检测任务异常: {e}", exc_info=True)
+        
+        websocket_heartbeat_task = asyncio.create_task(heartbeat_loop())
+        logger.info(
+            f"WebSocket 心跳检测已启动，清理间隔: {settings.WEBSOCKET_CLEANUP_INTERVAL}秒"
+        )
+
         logger.info("FastAPI 应用启动完成！")
         logger.info("=" * 60)
     except Exception as e:
@@ -102,6 +125,17 @@ async def lifespan(app: FastAPI):
     logger.info("FastAPI 应用关闭中...")
 
     try:
+        # 停止 WebSocket 心跳检测任务
+        if websocket_heartbeat_task and not websocket_heartbeat_task.done():
+            logger.info("正在停止 WebSocket 心跳检测...")
+            websocket_heartbeat_task.cancel()
+            try:
+                await asyncio.wait_for(websocket_heartbeat_task, timeout=5.0)
+            except asyncio.CancelledError:
+                logger.info("WebSocket 心跳检测任务已停止")
+            except asyncio.TimeoutError:
+                logger.warning("WebSocket 心跳检测停止超时")
+        
         # 停止 Kafka 消费者任务
         if kafka_consumer_task and not kafka_consumer_task.done():
             logger.info("正在停止 Kafka 消费者...")
@@ -170,11 +204,13 @@ async def business_exception_handler(request: Request, exc: BusinessException):
             "code": exc.code,
         }
     )
+    # 将字符串错误码转换为数字
+    error_code = get_error_code_by_string(exc.code) if isinstance(exc.code, str) else exc.code
+    
     return JSONResponse(
         status_code=exc.status_code,
         content={
-            "success": False,
-            "code": exc.code,
+            "code": error_code,
             "message": exc.message,
             "data": exc.data
         }
@@ -193,22 +229,12 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
             "status_code": exc.status_code,
         }
     )
-    # 401 错误返回统一格式（code 为数字）
-    if exc.status_code == 401:
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={
-                "code": exc.status_code,
-                "message": exc.detail if exc.detail else "Unauthorized"
-            }
-        )
-    
+    # 统一返回格式，使用HTTP状态码作为错误码
     return JSONResponse(
         status_code=exc.status_code,
         content={
-            "success": False,
-            "code": f"HTTP_{exc.status_code}",
-            "message": exc.detail,
+            "code": exc.status_code,
+            "message": exc.detail if exc.detail else f"HTTP {exc.status_code} Error",
             "data": None
         }
     )
@@ -236,8 +262,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     return JSONResponse(
         status_code=422,
         content={
-            "success": False,
-            "code": "VALIDATION_ERROR",
+            "code": ErrorCode.VALIDATION_ERROR,
             "message": "请求参数验证失败",
             "data": {"errors": errors}
         }
@@ -258,8 +283,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
         content={
-            "success": False,
-            "code": "INTERNAL_SERVER_ERROR",
+            "code": ErrorCode.INTERNAL_SERVER_ERROR,
             "message": "服务器内部错误" if not settings.DEBUG else str(exc),
             "data": None
         }
@@ -273,13 +297,24 @@ app.include_router(api_router)
 @app.get("/")
 async def root():
     """根路径"""
-    return {"message": "FastAPI 服务运行中", "docs": "/docs", "redoc": "/redoc"}
+    return {
+        "code": ErrorCode.SUCCESS,
+        "message": "FastAPI 服务运行中",
+        "data": {
+            "docs": "/docs",
+            "redoc": "/redoc"
+        }
+    }
 
 
 @app.get("/health")
 async def health_check():
     """基础健康检查"""
-    return {"status": "healthy"}
+    return {
+        "code": ErrorCode.SUCCESS,
+        "message": "服务健康",
+        "data": {"status": "healthy"}
+    }
 
 
 @app.get("/health/detailed")
@@ -420,4 +455,8 @@ async def detailed_health_check():
     
     health_status["status"] = "healthy" if overall_healthy else "degraded"
     
-    return health_status
+    return {
+        "code": ErrorCode.SUCCESS if overall_healthy else ErrorCode.INTERNAL_SERVER_ERROR,
+        "message": "所有服务正常" if overall_healthy else "部分服务异常",
+        "data": health_status
+    }

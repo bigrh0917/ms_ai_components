@@ -79,7 +79,12 @@ async def get_captcha(request: Request):
 
         logger.info(f"生成图形验证码成功 | IP: {client_ip} | ID: {captcha_id[:8]}...")
 
-        return CaptchaResponse(captcha_id=captcha_id, captcha_image=captcha_image)
+        from app.schemas.auth import CaptchaData
+        return CaptchaResponse(
+            code=200,
+            message="获取验证码成功",
+            data=CaptchaData(captcha_id=captcha_id, captcha_image=captcha_image)
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -159,8 +164,11 @@ async def send_email_code(
 
         logger.info(f"邮箱验证码发送成功 | 邮箱: {masked_email}")
 
+        from app.schemas.auth import SendEmailCodeData
         return SendEmailCodeResponse(
-            temp_token=temp_token, message="验证码已发送到您的邮箱，有效期5分钟"
+            code=200,
+            message="验证码已发送到您的邮箱，有效期5分钟",
+            data=SendEmailCodeData(temp_token=temp_token)
         )
     except HTTPException:
         raise
@@ -283,13 +291,17 @@ async def register(
     # 清理相关临时数据
     # temp_token 会自动过期，这里可选择性删除
 
+    from app.schemas.auth import UserRegisterData
     return UserRegisterResponse(
-        id=new_user.id,
-        username=new_user.username,
-        email=new_user.email,
-        access_token=access_token,
-        token_type="bearer",
+        code=200,
         message="注册成功",
+        data=UserRegisterData(
+            id=new_user.id,
+            username=new_user.username,
+            email=new_user.email,
+            access_token=access_token,
+            token_type="bearer"
+        )
     )
 
 
@@ -322,12 +334,17 @@ async def login(request_data: UserLoginRequest, db: AsyncSession = Depends(get_d
     # 生成访问 token（增强版）
     access_token = await jwt_utils.generate_token(db, user.username)
 
+    from app.schemas.auth import UserLoginData
     return UserLoginResponse(
-        access_token=access_token,
-        token_type="bearer",
-        user_id=user.id,
-        username=user.username,
-        email=user.email,
+        code=200,
+        message="登录成功",
+        data=UserLoginData(
+            access_token=access_token,
+            token_type="bearer",
+            user_id=user.id,
+            username=user.username,
+            email=user.email
+        )
     )
 
 

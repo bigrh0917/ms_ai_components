@@ -2,16 +2,16 @@
 文件相关 Schema
 """
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
+from app.schemas.base import BaseResponse
 
 
 # ========== 分片上传 ==========
-class ChunkUploadResponse(BaseModel):
+class ChunkUploadResponse(BaseResponse[Dict[str, Any]]):
     """分片上传响应"""
-    code: int = 200
-    message: str = "分片上传成功"
-    data: dict
+    code: int = Field(200, description="状态码")
+    message: str = Field("分片上传成功", description="提示信息")
 
 
 class ChunkUploadData(BaseModel):
@@ -21,11 +21,10 @@ class ChunkUploadData(BaseModel):
 
 
 # ========== 查询上传状态 ==========
-class UploadStatusResponse(BaseModel):
+class UploadStatusResponse(BaseResponse[Dict[str, Any]]):
     """查询上传状态响应"""
-    code: int = 200
-    message: str = "Success"
-    data: dict
+    code: int = Field(200, description="状态码")
+    message: str = Field("Success", description="提示信息")
 
 
 class UploadStatusData(BaseModel):
@@ -42,11 +41,10 @@ class MergeFileRequest(BaseModel):
     file_name: str = Field(..., min_length=1, description="文件名")
 
 
-class MergeFileResponse(BaseModel):
+class MergeFileResponse(BaseResponse[Dict[str, Any]]):
     """文件合并响应"""
-    code: int = 200
-    message: str = "File merged successfully"
-    data: dict
+    code: int = Field(200, description="状态码")
+    message: str = Field("File merged successfully", description="提示信息")
 
 
 class MergeFileData(BaseModel):
@@ -69,10 +67,10 @@ class FileInfo(BaseModel):
     mergedAt: Optional[datetime] = None
 
 
-class FileListResponse(BaseModel):
+class FileListResponse(BaseResponse[List[FileInfo]]):
     """文件列表响应"""
-    status: str = "success"
-    data: List[FileInfo]
+    code: int = Field(200, description="状态码")
+    message: str = Field("获取文件列表成功", description="提示信息")
 
 
 class FileUploadInfo(BaseModel):
@@ -88,15 +86,15 @@ class FileUploadInfo(BaseModel):
     mergedAt: Optional[datetime] = None
 
 
-class FileUploadListResponse(BaseModel):
+class FileUploadListResponse(BaseResponse[List[FileUploadInfo]]):
     """用户上传文件列表响应"""
-    status: str = "success"
-    data: List[FileUploadInfo]
+    code: int = Field(200, description="状态码")
+    message: str = Field("获取文件列表成功", description="提示信息")
 
 
 # ========== 文件删除 ==========
-class DeleteFileResponse(BaseModel):
+class DeleteFileResponse(BaseResponse[Optional[Dict[str, Any]]]):
     """文件删除响应"""
-    status: str = "success"
-    message: str = "文档删除成功"
+    code: int = Field(200, description="状态码")
+    message: str = Field("文档删除成功", description="提示信息")
 

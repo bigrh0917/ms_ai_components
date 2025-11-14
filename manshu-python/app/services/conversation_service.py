@@ -249,6 +249,49 @@ class ConversationService:
         except json.JSONDecodeError:
             return []
     
+    async def verify_conversation_ownership(
+        self,
+        conversation_id: str,
+        user_id: int,
+        db: Optional[AsyncSession] = None
+    ) -> bool:
+        """
+        验证会话是否属于指定用户
+        
+        Args:
+            conversation_id: 会话ID
+            user_id: 用户ID
+            db: 数据库会话（可选，用于检查归档会话）
+            
+        Returns:
+            是否属于该用户
+        """
+        # 1. 检查是否在用户的会话列表中
+        user_conversations = await self.get_user_conversations(user_id)
+        if conversation_id in user_conversations:
+            return True
+        
+        # 2. 检查是否是当前会话
+        current_conversation = await self.get_current_conversation(user_id)
+        if conversation_id == current_conversation:
+            return True
+        
+        # 3. 如果提供了db，检查是否在归档记录中
+        if db:
+            from app.models.chat import ConversationArchive
+            from sqlalchemy import select
+            
+            result = await db.execute(
+                select(ConversationArchive).where(
+                    ConversationArchive.conversation_id == conversation_id,
+                    ConversationArchive.user_id == user_id
+                )
+            )
+            if result.scalar_one_or_none():
+                return True
+        
+        return False
+    
     async def add_user_conversation(self, user_id: int, conversation_id: str) -> bool:
         """
         将会话ID添加到用户的会话列表

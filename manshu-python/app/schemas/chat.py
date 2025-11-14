@@ -4,6 +4,7 @@
 from typing import List, Optional
 from pydantic import BaseModel, Field
 from datetime import datetime
+from app.schemas.base import BaseResponse
 
 
 class MessageItem(BaseModel):
@@ -18,18 +19,16 @@ class MessageItemWithUser(MessageItem):
     username: Optional[str] = Field(None, description="用户名")
 
 
-class ConversationHistoryResponse(BaseModel):
+class ConversationHistoryResponse(BaseResponse[List[MessageItem]]):
     """对话历史响应"""
     code: int = Field(200, description="状态码")
     message: str = Field("获取对话历史成功", description="消息")
-    data: List[MessageItem] = Field(..., description="对话历史列表")
 
 
-class ConversationHistoryAdminResponse(BaseModel):
+class ConversationHistoryAdminResponse(BaseResponse[List[MessageItemWithUser]]):
     """管理员对话历史响应（包含用户名）"""
     code: int = Field(200, description="状态码")
     message: str = Field("获取对话历史成功", description="消息")
-    data: List[MessageItemWithUser] = Field(..., description="对话历史列表")
 
 
 class WebSocketTokenData(BaseModel):
@@ -37,11 +36,10 @@ class WebSocketTokenData(BaseModel):
     cmdToken: str = Field(..., description="停止指令Token")
 
 
-class WebSocketTokenResponse(BaseModel):
+class WebSocketTokenResponse(BaseResponse[WebSocketTokenData]):
     """WebSocket停止指令Token响应"""
     code: int = Field(200, description="状态码")
     message: str = Field("获取WebSocket停止指令Token成功", description="消息")
-    data: WebSocketTokenData = Field(..., description="Token数据")
 
 
 class WebSocketMessage(BaseModel):
@@ -68,11 +66,10 @@ class ConversationItem(BaseModel):
     last_message_time: Optional[str] = Field(None, description="最后一条消息时间")
 
 
-class ConversationListResponse(BaseModel):
+class ConversationListResponse(BaseResponse[List[ConversationItem]]):
     """会话列表响应"""
     code: int = Field(200, description="状态码")
     message: str = Field("获取会话列表成功", description="消息")
-    data: List[ConversationItem] = Field(..., description="会话列表")
 
 
 class ConversationQueryParams(BaseModel):
@@ -81,3 +78,14 @@ class ConversationQueryParams(BaseModel):
     end_date: Optional[str] = Field(None, description="结束日期时间，格式: yyyy-MM-ddTHH:mm:ss")
     userid: Optional[int] = Field(None, description="用户ID（仅管理员接口）")
 
+
+class ArchiveConversationData(BaseModel):
+    """归档会话数据"""
+    conversation_id: str = Field(..., description="会话ID")
+    archived_at: str = Field(..., description="归档时间，ISO格式")
+
+
+class ArchiveConversationResponse(BaseResponse[ArchiveConversationData]):
+    """归档会话响应"""
+    code: int = Field(200, description="状态码")
+    message: str = Field("会话归档成功", description="提示信息")

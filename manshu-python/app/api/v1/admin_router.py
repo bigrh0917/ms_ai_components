@@ -93,7 +93,8 @@ async def create_org_tag(
     
     return CreateOrgTagResponse(
         code=200,
-        message="Organization tag created successfully"
+        message="Organization tag created successfully",
+        data=None
     )
 
 
@@ -150,7 +151,8 @@ async def assign_org_tags(
     
     return AssignOrgTagsResponse(
         code=200,
-        message="Organization tags assigned successfully"
+        message="Organization tags assigned successfully",
+        data=None
     )
 
 
@@ -211,7 +213,8 @@ async def set_primary_org(
     
     return SetPrimaryOrgResponse(
         code=200,
-        message="Primary organization set successfully"
+        message="Primary organization set successfully",
+        data=None
     )
 
 
@@ -388,7 +391,8 @@ async def update_org_tag(
     
     return UpdateOrgTagResponse(
         code=200,
-        message="Organization tag updated successfully"
+        message="Organization tag updated successfully",
+        data=None
     )
 
 
@@ -448,6 +452,7 @@ async def delete_org_tag(
     
     return DeleteOrgTagResponse(
         code=200,
-        message="Organization tag deleted successfully"
+        message="Organization tag deleted successfully",
+        data=None
     )
 

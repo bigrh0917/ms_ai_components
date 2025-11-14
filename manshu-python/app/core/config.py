@@ -120,6 +120,12 @@ class Settings(BaseSettings):
     CONVERSATION_TTL_DAYS: int = 7  # 会话过期时间（天）
     CHAT_STOP_TOKEN_TTL: int = 300  # 停止令牌有效期（秒）
     
+    # WebSocket 连接管理配置
+    WEBSOCKET_MAX_CONNECTIONS_PER_USER: int = 10  # 单用户最大连接数（防止资源耗尽）
+    WEBSOCKET_MAX_CONNECTIONS_PER_INSTANCE: int = 1000  # 单实例最大连接数（防止内存溢出）
+    WEBSOCKET_IDLE_TIMEOUT: int = 3600  # 空闲连接超时时间（秒），0表示不超时
+    WEBSOCKET_CLEANUP_INTERVAL: int = 300  # 清理不活跃连接的间隔（秒）
+    
     # 混合检索配置
     SEARCH_VECTOR_WEIGHT: float = 0.7  # 向量检索权重（0-1）
     SEARCH_TEXT_WEIGHT: float = 0.3  # 全文检索权重（0-1）

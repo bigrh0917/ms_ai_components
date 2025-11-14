@@ -5,6 +5,9 @@ import aiosmtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from app.core.config import settings
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class EmailService:
@@ -62,7 +65,7 @@ class EmailService:
             return True
             
         except Exception as e:
-            print(f"发送邮件失败: {e}")
+            logger.error(f"发送邮件失败: {e}", exc_info=True)
             return False
 
 

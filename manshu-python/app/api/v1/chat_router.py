@@ -12,6 +12,7 @@ from app.api.deps import get_db, get_current_user
 from app.models.user import User
 from app.services.chat_service import chat_service
 from app.services.conversation_service import conversation_service
+from app.services.websocket_manager import websocket_manager
 from app.schemas.chat import (
     ConversationHistoryResponse,
     ConversationHistoryAdminResponse,
@@ -21,6 +22,8 @@ from app.schemas.chat import (
     MessageItemWithUser,
     WebSocketTokenResponse,
     WebSocketTokenData,
+    ArchiveConversationResponse,
+    ArchiveConversationData,
 )
 from app.clients.redis_client import redis_client
 from app.clients.db_client import db_client
@@ -81,24 +84,35 @@ async def verify_websocket_token(websocket: WebSocket, token: str) -> Optional[U
 @router.websocket("/chat")
 async def websocket_chat(websocket: WebSocket):
     """
-    WebSocket聊天接口
+    WebSocket聊天接口（使用连接管理器）
     
-    客户端连接: ws://host/api/v1/chat?token={jwt_token}
+    客户端连接: ws://host/api/v1/chat?token={jwt_token}[&conversation_id={conversation_id}]
     其中token是JWT Token（通过查询参数传递）
+    conversation_id是可选的，如果不提供则创建新会话
     
     消息格式:
-    - 普通消息: 纯文本字符串
+    - 普通消息: 纯文本字符串 或 {"type": "message", "content": "..."}
     - 停止指令: {"type": "stop", "_internal_cmd_token": "..."}
+    - 心跳响应: {"type": "pong"} (响应服务端的ping消息)
     
     响应格式:
+    - 连接成功: {"type": "connected", "connection_id": "...", "conversation_id": "..."}
+    - 心跳ping: {"type": "ping", "timestamp": ...} (服务端定期发送，客户端应回复pong)
     - 内容块: {"chunk": "..."}
     - 完成通知: {"type": "completion", "status": "finished", ...}
     - 停止确认: {"type": "stop", "message": "响应已停止", ...}
     - 错误: {"error": "..."}
+    
+    心跳机制:
+    - 服务端会定期发送ping消息检测连接活跃度
+    - 客户端收到ping后应回复pong消息
+    - 如果连接空闲超过WEBSOCKET_IDLE_TIMEOUT秒，服务端会发送ping检测
+    - 如果ping后5秒内未收到pong响应，连接将被自动断开
     """
-    # 从查询参数获取token
+    # 从查询参数获取token和可选的会话ID
     query_params = dict(websocket.query_params)
     token = query_params.get("token")
+    specified_conversation_id = query_params.get("conversation_id")
     
     if not token:
         logger.warning("WebSocket连接缺少Token参数")
@@ -111,8 +125,10 @@ async def websocket_chat(websocket: WebSocket):
     
     logger.info(f"收到WebSocket连接请求，Token长度: {len(token)}")
     
+    websocket_accepted = False
     try:
         await websocket.accept()
+        websocket_accepted = True
         logger.info("WebSocket连接已接受")
     except Exception as e:
         logger.error(f"WebSocket accept失败: {e}", exc_info=True)
@@ -122,109 +138,298 @@ async def websocket_chat(websocket: WebSocket):
     user = await verify_websocket_token(websocket, token)
     if not user:
         logger.warning("WebSocket Token验证失败，连接已关闭")
+        if websocket_accepted:
+            try:
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Token验证失败")
+            except:
+                pass
         return
     
-    logger.info(f"WebSocket连接建立: user_id={user.id}, username={user.username}")
-    
-    # 停止令牌（用于安全地停止响应）
-    stop_token = None
-    
+    # 确定要使用的会话ID
+    conversation_id = None
     try:
-        while True:
-            # 接收消息
-            data = await websocket.receive_text()
-            
-            # 解析消息（尝试JSON格式）
-            try:
-                message_data = json.loads(data)
-                if message_data.get("type") == "stop":
-                    # 验证停止令牌
-                    cmd_token = message_data.get("_internal_cmd_token")
-                    if cmd_token and cmd_token == stop_token:
+        # 如果指定了会话ID，验证权限
+        if specified_conversation_id:
+            # 验证会话是否属于该用户
+            async for db in db_client.get_session():
+                is_owner = await conversation_service.verify_conversation_ownership(
+                    specified_conversation_id,
+                    user.id,
+                    db=db
+                )
+                if not is_owner:
+                    logger.warning(
+                        f"用户 {user.id} 尝试访问不属于自己的会话: {specified_conversation_id}"
+                    )
+                    try:
                         await websocket.send_json({
-                            "type": "stop",
-                            "message": "响应已停止",
+                            "error": "无权访问该会话",
+                            "type": "permission_denied"
+                        })
+                        await websocket.close(
+                            code=status.WS_1008_POLICY_VIOLATION,
+                            reason="无权访问该会话"
+                        )
+                    except:
+                        pass
+                    return
+                conversation_id = specified_conversation_id
+                break
+        else:
+            # 如果没有指定，创建新会话
+            conversation_id = await conversation_service.create_conversation(user.id)
+            logger.info(f"为用户 {user.id} 创建新会话: {conversation_id}")
+    except Exception as e:
+        logger.error(f"会话处理失败: {e}", exc_info=True)
+        try:
+            await websocket.send_json({
+                "error": "会话处理失败，请稍后重试",
+                "type": "conversation_error"
+            })
+            await websocket.close(
+                code=status.WS_1011_INTERNAL_ERROR,
+                reason="服务器错误"
+            )
+        except:
+            pass
+        return
+    
+    # 防御性检查：确保 conversation_id 不为空
+    if not conversation_id:
+        logger.error("会话ID为空，无法建立连接")
+        try:
+            await websocket.send_json({
+                "error": "会话处理失败",
+                "type": "conversation_error"
+            })
+            await websocket.close(
+                code=status.WS_1011_INTERNAL_ERROR,
+                reason="服务器错误"
+            )
+        except:
+            pass
+        return
+    
+    # 使用连接管理器建立连接
+    connection_id = None
+    try:
+        try:
+            connection_id = await websocket_manager.connect(
+                websocket=websocket,
+                user=user,
+                conversation_id=conversation_id
+            )
+        except ValueError as e:
+            # 连接数限制错误
+            logger.warning(f"连接数限制: {e}")
+            await websocket.send_json({
+                "error": "连接数已达到上限，请稍后再试",
+                "type": "connection_limit"
+            })
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="连接数限制")
+            return
+        
+        logger.info(
+            f"WebSocket连接建立: connection_id={connection_id}, "
+            f"user_id={user.id}, conversation_id={conversation_id}"
+        )
+        
+        # 发送连接成功消息
+        await websocket.send_json({
+            "type": "connected",
+            "connection_id": connection_id,
+            "conversation_id": conversation_id,
+            "timestamp": int(time.time() * 1000)
+        })
+        
+        # 停止令牌（用于安全地停止响应）
+        stop_token = None
+        
+        try:
+            while True:
+                # 接收消息
+                data = await websocket.receive_text()
+                
+                # 获取连接对象并更新活动时间
+                connection = websocket_manager.get_connection(connection_id)
+                if connection:
+                    connection.update_activity()
+                
+                # 解析消息（尝试JSON格式）
+                message_data = None
+                try:
+                    message_data = json.loads(data)
+                    message_type = message_data.get("type")
+                    
+                    # 处理心跳pong响应
+                    if message_type == "pong":
+                        await websocket_manager.handle_pong(connection_id)
+                        logger.debug(f"收到心跳pong响应: connection_id={connection_id}")
+                        continue
+                    
+                    if message_type == "stop":
+                        # 验证停止令牌
+                        cmd_token = message_data.get("_internal_cmd_token")
+                        if connection and cmd_token and cmd_token == connection.current_stop_token:
+                            await websocket_manager.send_to_connection(connection_id, {
+                                "type": "stop",
+                                "message": "响应已停止",
+                                "timestamp": int(time.time() * 1000),
+                                "date": datetime.now().isoformat()
+                            })
+                            logger.info(f"用户 {user.id} 停止响应")
+                            break
+                        else:
+                            logger.warning(f"无效的停止令牌: user_id={user.id}")
+                        continue
+                except (json.JSONDecodeError, KeyError):
+                    pass  # 普通文本消息
+                
+                # 处理普通文本消息
+                user_message = data if isinstance(data, str) else (message_data.get("content", "") if message_data else "")
+                
+                if not user_message or not user_message.strip():
+                    continue
+                
+                logger.info(
+                    f"收到用户消息: connection_id={connection_id}, "
+                    f"user_id={user.id}, message_length={len(user_message)}"
+                )
+                
+                # 生成停止令牌（每次新请求都生成新的）
+                stop_token = f"WSS_STOP_CMD_{uuid.uuid4().hex[:8]}"
+                if connection:
+                    connection.current_stop_token = stop_token
+                
+                await redis_client.set(
+                    f"chat:stop_token:{stop_token}",
+                    str(user.id),
+                    expire=settings.CHAT_STOP_TOKEN_TTL
+                )
+                
+                # 处理消息（流式返回，使用连接绑定的会话ID）
+                try:
+                    async for db in db_client.get_session():
+                        async for chunk in chat_service.process_message(
+                            db, user, user_message,
+                            conversation_id=conversation_id  # 使用连接绑定的会话ID
+                        ):
+                            # 检查是否收到停止指令
+                            try:
+                                # 非阻塞检查停止令牌是否已被删除
+                                token_exists = await redis_client.exists(f"chat:stop_token:{stop_token}")
+                                if not token_exists:
+                                    logger.info(
+                                        f"检测到停止请求，中断响应: "
+                                        f"connection_id={connection_id}, user_id={user.id}"
+                                    )
+                                    await websocket_manager.send_to_connection(connection_id, {
+                                        "type": "stop",
+                                        "message": "响应已停止",
+                                        "timestamp": int(time.time() * 1000),
+                                        "date": datetime.now().isoformat()
+                                    })
+                                    break
+                            except:
+                                pass
+                            
+                            # 发送内容块
+                            await websocket_manager.send_to_connection(
+                                connection_id,
+                                {"chunk": chunk}
+                            )
+                        
+                        # 发送完成通知
+                        await websocket_manager.send_to_connection(connection_id, {
+                            "type": "completion",
+                            "status": "finished",
+                            "message": "响应已完成",
                             "timestamp": int(time.time() * 1000),
                             "date": datetime.now().isoformat()
                         })
-                        logger.info(f"用户 {user.id} 停止响应")
-                        break
-                    else:
-                        logger.warning(f"无效的停止令牌: user_id={user.id}")
-                    continue
-            except (json.JSONDecodeError, KeyError):
-                pass  # 普通文本消息
-            
-            # 处理普通文本消息
-            user_message = data if isinstance(data, str) else message_data.get("content", "")
-            
-            if not user_message or not user_message.strip():
-                continue
-            
-            logger.info(f"收到用户消息: user_id={user.id}, message_length={len(user_message)}")
-            
-            # 生成停止令牌（每次新请求都生成新的）
-            stop_token = f"WSS_STOP_CMD_{uuid.uuid4().hex[:8]}"
-            await redis_client.set(
-                f"chat:stop_token:{stop_token}",
-                str(user.id),
-                expire=settings.CHAT_STOP_TOKEN_TTL
-            )
-            
-            # 处理消息（流式返回）
-            try:
-                async for db in db_client.get_session():
-                    async for chunk in chat_service.process_message(db, user, user_message):
-                        # 检查是否收到停止指令
-                        try:
-                            # 非阻塞检查停止令牌是否已被删除
-                            token_exists = await redis_client.exists(f"chat:stop_token:{stop_token}")
-                            if not token_exists:
-                                logger.info(f"检测到停止请求，中断响应: user_id={user.id}")
-                                await websocket.send_json({
-                                    "type": "stop",
-                                    "message": "响应已停止",
-                                    "timestamp": int(time.time() * 1000),
-                                    "date": datetime.now().isoformat()
-                                })
-                                break
-                        except:
-                            pass
                         
-                        # 发送内容块
-                        await websocket.send_json({"chunk": chunk})
+                        # 清理停止令牌
+                        await redis_client.delete(f"chat:stop_token:{stop_token}")
+                        break  # 退出循环，因为我们只需要一个会话
                     
-                    # 发送完成通知
-                    await websocket.send_json({
-                        "type": "completion",
-                        "status": "finished",
-                        "message": "响应已完成",
-                        "timestamp": int(time.time() * 1000),
-                        "date": datetime.now().isoformat()
+                except Exception as e:
+                    logger.error(
+                        f"处理消息失败: connection_id={connection_id}, error={e}",
+                        exc_info=True
+                    )
+                    await websocket_manager.send_to_connection(connection_id, {
+                        "error": "AI服务暂时不可用，请稍后重试"
                     })
-                    
-                    # 清理停止令牌
-                    await redis_client.delete(f"chat:stop_token:{stop_token}")
-                    break  # 退出循环，因为我们只需要一个会话
-                
-            except Exception as e:
-                logger.error(f"处理消息失败: {e}", exc_info=True)
-                await websocket.send_json({
-                    "error": "AI服务暂时不可用，请稍后重试"
+        
+        except WebSocketDisconnect:
+            logger.info(
+                f"WebSocket连接断开: connection_id={connection_id}, user_id={user.id}"
+            )
+        except Exception as e:
+            logger.error(
+                f"WebSocket处理错误: connection_id={connection_id}, error={e}",
+                exc_info=True
+            )
+            try:
+                await websocket_manager.send_to_connection(connection_id, {
+                    "error": "服务器内部错误"
                 })
-            
-    except WebSocketDisconnect:
-        logger.info(f"WebSocket连接断开: user_id={user.id}")
+            except:
+                pass
+        finally:
+            # 清理停止令牌
+            if stop_token:
+                await redis_client.delete(f"chat:stop_token:{stop_token}")
+    
     except Exception as e:
-        logger.error(f"WebSocket处理错误: {e}", exc_info=True)
-        try:
-            await websocket.send_json({"error": "服务器内部错误"})
-        except:
-            pass
+        logger.error(f"WebSocket连接管理错误: {e}", exc_info=True)
     finally:
-        # 清理停止令牌
-        if stop_token:
-            await redis_client.delete(f"chat:stop_token:{stop_token}")
+        # 从连接管理器中移除连接
+        if connection_id:
+            await websocket_manager.disconnect(connection_id)
+
+
+@router.get("/chat/websocket/statistics")
+async def get_websocket_statistics(
+    current_user: User = Depends(get_current_user)
+):
+    """
+    获取 WebSocket 连接统计信息（管理员功能）
+    
+    返回当前活跃连接数、用户数、会话数等统计信息
+    """
+    # 检查是否为管理员（可选）
+    # if current_user.role != UserRole.ADMIN:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_403_FORBIDDEN,
+    #         detail="需要管理员权限"
+    #     )
+    
+    statistics = websocket_manager.get_statistics()
+    
+    # 获取当前用户的连接信息
+    user_connections = websocket_manager.get_user_connections(current_user.id)
+    user_connection_details = []
+    for conn_id in user_connections:
+        conn = websocket_manager.get_connection(conn_id)
+        if conn:
+            user_connection_details.append({
+                "connection_id": conn.connection_id,
+                "conversation_id": conn.conversation_id,
+                "created_at": conn.created_at.isoformat(),
+                "last_activity": conn.last_activity.isoformat(),
+                "is_active": conn.is_active
+            })
+    
+    return {
+        "code": 200,
+        "message": "获取统计信息成功",
+        "data": {
+            **statistics,
+            "current_user_connections": len(user_connections),
+            "current_user_connection_details": user_connection_details
+        }
+    }
 
 
 @router.get("/chat/websocket-token", response_model=WebSocketTokenResponse)
@@ -456,7 +661,7 @@ async def get_admin_conversation_history(
         )
 
 
-@router.post("/conversations/{conversation_id}/archive")
+@router.post("/conversations/{conversation_id}/archive", response_model=ArchiveConversationResponse)
 async def archive_conversation(
     conversation_id: str,
     current_user: User = Depends(get_current_user),
@@ -544,14 +749,14 @@ async def archive_conversation(
         )
         archive = result.scalar_one_or_none()
         
-        return {
-            "code": 200,
-            "message": "会话归档成功",
-            "data": {
-                "conversation_id": conversation_id,
-                "archived_at": archive.archived_at.isoformat() if archive else datetime.now().isoformat()
-            }
-        }
+        return ArchiveConversationResponse(
+            code=200,
+            message="会话归档成功",
+            data=ArchiveConversationData(
+                conversation_id=conversation_id,
+                archived_at=archive.archived_at.isoformat() if archive else datetime.now().isoformat()
+            )
+        )
         
     except HTTPException:
         raise

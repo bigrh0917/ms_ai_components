@@ -21,7 +21,11 @@ router = APIRouter()
 @router.get("/ping")
 async def document_ping():
     """文档模块健康检查"""
-    return {"module": "document", "status": "ok"}
+    return {
+        "code": 200,
+        "message": "文档模块正常",
+        "data": {"module": "document", "status": "ok"}
+    }
 
 
 @router.get("/hybrid", response_model=HybridSearchResponse, summary="混合检索接口")

@@ -187,8 +187,9 @@ async def delete_file(
         )
         
         return DeleteFileResponse(
-            status="success",
-            message="文档删除成功"
+            code=200,
+            message="文档删除成功",
+            data=None
         )
         
     except HTTPException:
@@ -235,7 +236,8 @@ async def get_accessible_files(
         ]
         
         return FileListResponse(
-            status="success",
+            code=200,
+            message="获取文件列表成功",
             data=file_list
         )
         
@@ -277,7 +279,8 @@ async def get_user_uploaded_files(
         ]
         
         return FileUploadListResponse(
-            status="success",
+            code=200,
+            message="获取文件列表成功",
             data=file_list
         )
         

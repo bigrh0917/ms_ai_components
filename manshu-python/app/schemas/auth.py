@@ -4,13 +4,20 @@
 from pydantic import BaseModel, EmailStr, Field, constr
 from datetime import datetime
 from typing import Optional, Literal, List
+from app.schemas.base import BaseResponse
 
 
 # ========== 图形验证码 ==========
-class CaptchaResponse(BaseModel):
-    """图形验证码响应"""
+class CaptchaData(BaseModel):
+    """图形验证码数据"""
     captcha_id: str = Field(..., description="验证码ID")
     captcha_image: str = Field(..., description="Base64编码的图片")
+
+
+class CaptchaResponse(BaseResponse[CaptchaData]):
+    """图形验证码响应"""
+    code: int = Field(200, description="状态码")
+    message: str = Field("获取验证码成功", description="提示信息")
 
 
 # ========== 发送邮箱验证码 ==========
@@ -21,10 +28,15 @@ class SendEmailCodeRequest(BaseModel):
     captcha_code: str = Field(..., min_length=4, max_length=6, description="图形验证码")
 
 
-class SendEmailCodeResponse(BaseModel):
-    """发送邮箱验证码响应"""
+class SendEmailCodeData(BaseModel):
+    """发送邮箱验证码数据"""
     temp_token: str = Field(..., description="临时令牌")
-    message: str = Field(default="验证码已发送", description="提示信息")
+
+
+class SendEmailCodeResponse(BaseResponse[SendEmailCodeData]):
+    """发送邮箱验证码响应"""
+    code: int = Field(200, description="状态码")
+    message: str = Field("验证码已发送到您的邮箱，有效期5分钟", description="提示信息")
 
 
 # ========== 用户注册 ==========
@@ -37,14 +49,19 @@ class UserRegisterRequest(BaseModel):
     temp_token: str = Field(..., description="临时令牌")
 
 
-class UserRegisterResponse(BaseModel):
-    """用户注册响应"""
+class UserRegisterData(BaseModel):
+    """用户注册数据"""
     id: int
     username: str
     email: EmailStr
     access_token: str = Field(..., description="访问令牌")
     token_type: str = Field(default="bearer")
-    message: str = Field(default="注册成功")
+
+
+class UserRegisterResponse(BaseResponse[UserRegisterData]):
+    """用户注册响应"""
+    code: int = Field(200, description="状态码")
+    message: str = Field("注册成功", description="提示信息")
 
 
 # ========== 用户登录 ==========
@@ -54,13 +71,19 @@ class UserLoginRequest(BaseModel):
     password: str
 
 
-class UserLoginResponse(BaseModel):
-    """用户登录响应"""
+class UserLoginData(BaseModel):
+    """用户登录数据"""
     access_token: str
     token_type: str = "bearer"
     user_id: int
     username: str
     email: EmailStr
+
+
+class UserLoginResponse(BaseResponse[UserLoginData]):
+    """用户登录响应"""
+    code: int = Field(200, description="状态码")
+    message: str = Field("登录成功", description="提示信息")
 
 
 # ========== 用户信息 ==========
@@ -89,11 +112,10 @@ class UserInfoData(BaseModel):
     primaryOrg: Optional[str] = None
 
 
-class UserInfoResponse(BaseModel):
+class UserInfoResponse(BaseResponse[UserInfoData]):
     """用户信息响应（统一格式）"""
-    code: int = 200
-    message: str = "Success"
-    data: UserInfoData
+    code: int = Field(200, description="状态码")
+    message: str = Field("Success", description="提示信息")
 
 
 # ========== 用户列表查询 ==========
@@ -116,9 +138,8 @@ class UserListContent(BaseModel):
     number: int  # 当前页码（从 0 开始）
 
 
-class UserListResponse(BaseModel):
+class UserListResponse(BaseResponse[UserListContent]):
     """用户列表响应"""
-    code: int = 200
-    message: str = "Get users successful"
-    data: UserListContent
+    code: int = Field(200, description="状态码")
+    message: str = Field("Get users successful", description="提示信息")
 

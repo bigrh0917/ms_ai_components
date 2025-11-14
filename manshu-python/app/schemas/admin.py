@@ -2,7 +2,8 @@
 管理员相关 Schema
 """
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
+from app.schemas.base import BaseResponse
 
 
 class CreateOrgTagRequest(BaseModel):
@@ -13,10 +14,10 @@ class CreateOrgTagRequest(BaseModel):
     parentTag: Optional[str] = Field(None, max_length=50, description="父标签ID（可选）")
 
 
-class CreateOrgTagResponse(BaseModel):
+class CreateOrgTagResponse(BaseResponse[Optional[Dict[str, Any]]]):
     """创建组织标签响应"""
-    code: int = 200
-    message: str = "Organization tag created successfully"
+    code: int = Field(200, description="状态码")
+    message: str = Field("Organization tag created successfully", description="提示信息")
 
 
 class AssignOrgTagsRequest(BaseModel):
@@ -25,10 +26,10 @@ class AssignOrgTagsRequest(BaseModel):
     orgTags: List[str] = Field(..., min_items=0, description="组织标签列表")
 
 
-class AssignOrgTagsResponse(BaseModel):
+class AssignOrgTagsResponse(BaseResponse[Optional[Dict[str, Any]]]):
     """分配组织标签响应"""
-    code: int = 200
-    message: str = "Organization tags assigned successfully"
+    code: int = Field(200, description="状态码")
+    message: str = Field("Organization tags assigned successfully", description="提示信息")
 
 
 class SetPrimaryOrgRequest(BaseModel):
@@ -37,10 +38,10 @@ class SetPrimaryOrgRequest(BaseModel):
     primaryOrg: str = Field(..., min_length=1, max_length=50, description="主组织标签ID")
 
 
-class SetPrimaryOrgResponse(BaseModel):
+class SetPrimaryOrgResponse(BaseResponse[Optional[Dict[str, Any]]]):
     """设置主组织响应"""
-    code: int = 200
-    message: str = "Primary organization set successfully"
+    code: int = Field(200, description="状态码")
+    message: str = Field("Primary organization set successfully", description="提示信息")
 
 
 # ========== 获取用户组织标签详情 ==========
@@ -58,11 +59,10 @@ class UserOrgTagsData(BaseModel):
     orgTagDetails: List[OrgTagDetail]
 
 
-class UserOrgTagsResponse(BaseModel):
+class UserOrgTagsResponse(BaseResponse[UserOrgTagsData]):
     """用户组织标签响应"""
-    code: int = 200
-    message: str = "Get user organization tags successful"
-    data: UserOrgTagsData
+    code: int = Field(200, description="状态码")
+    message: str = Field("Get user organization tags successful", description="提示信息")
 
 
 # ========== 组织标签树 ==========
@@ -74,11 +74,10 @@ class OrgTagTreeNode(BaseModel):
     children: List["OrgTagTreeNode"] = []
 
 
-class OrgTagTreeResponse(BaseModel):
+class OrgTagTreeResponse(BaseResponse[List[OrgTagTreeNode]]):
     """组织标签树响应"""
-    code: int = 200
-    message: str = "Get organization tag tree successful"
-    data: List[OrgTagTreeNode]
+    code: int = Field(200, description="状态码")
+    message: str = Field("Get organization tag tree successful", description="提示信息")
 
 
 # ========== 更新组织标签 ==========
@@ -89,15 +88,15 @@ class UpdateOrgTagRequest(BaseModel):
     parentTag: Optional[str] = Field(None, max_length=50, description="新父标签ID（可选）")
 
 
-class UpdateOrgTagResponse(BaseModel):
+class UpdateOrgTagResponse(BaseResponse[Optional[Dict[str, Any]]]):
     """更新组织标签响应"""
-    code: int = 200
-    message: str = "Organization tag updated successfully"
+    code: int = Field(200, description="状态码")
+    message: str = Field("Organization tag updated successfully", description="提示信息")
 
 
 # ========== 删除组织标签 ==========
-class DeleteOrgTagResponse(BaseModel):
+class DeleteOrgTagResponse(BaseResponse[Optional[Dict[str, Any]]]):
     """删除组织标签响应"""
-    code: int = 200
-    message: str = "Organization tag deleted successfully"
+    code: int = Field(200, description="状态码")
+    message: str = Field("Organization tag deleted successfully", description="提示信息")
 
